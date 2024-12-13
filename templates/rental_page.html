@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Текущая поездка</title>
+    <style>
+        /* Минимальные стили для улучшения внешнего вида */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+            color: #333;
+        }
+
+        header {
+            background-color: #007bff;
+            color: #fff;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        header a {
+            color: #fff;
+            margin: 0 1rem;
+            text-decoration: none;
+        }
+
+        main {
+            padding: 2rem;
+        }
+
+        section {
+            margin-bottom: 2rem;
+            padding: 1rem;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        footer {
+            text-align: center;
+            padding: 1rem;
+            background-color: #f1f1f1;
+            margin-top: 2rem;
+        }
+
+        button {
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Текущая поездка</h1>
+        <a href="/home">Главная</a>
+        <a href="/profile">Профиль</a>
+    </header>
+
+    <main>
+        <!-- Информация о самокате -->
+        <section id="scooter-info">
+            <h2>Самокат</h2>
+            <p><strong>Модель:</strong> {{ scooter.model }}</p>
+            <p><strong>Уровень заряда:</strong> {{ scooter.battery_level }}%</p>
+            <p><strong>Локация:</strong> {{ location.name }}</p>
+        </section>
+
+        <!-- Информация о поездке -->
+        <section id="rental-info">
+            <h2>Детали поездки</h2>
+            <p><strong>Начало аренды:</strong> {{ rental.start_time }}</p>
+            <p><strong>Тариф:</strong> {{ rental.price_per_minute }} ₽/мин</p>
+            <p><strong>Текущая стоимость:</strong> <span id="current-cost">{{ rental.current_cost }}</span> ₽</p>
+        </section>
+
+        <!-- Завершение поездки -->
+        <section id="rental-actions">
+            <h2>Действия</h2>
+            <form method="POST" action="/rental/end">
+                <input type="hidden" name="rental_id" value="{{ rental.rental_id }}">
+                <button type="submit" id="end-rental-btn">Завершить поездку</button>
+            </form>
+        </section>
+    </main>
+
+    <footer>
+        <p>© 2024 Scooter Rental Service</p>
+    </footer>
+
+    <script>
+        // Скрипт для обновления текущей стоимости поездки в реальном времени
+        let startTime = new Date("{{ rental.start_time }}");
+        let pricePerMinute = {{ rental.price_per_minute }};
+        let costElement = document.getElementById("current-cost");
+
+        function updateCost() {
+            let now = new Date();
+            let duration = (now - startTime) / 60000; // Время в минутах
+            let cost = Math.max(0, Math.round(duration * pricePerMinute * 100) / 100); // Рассчитываем стоимость
+            costElement.textContent = cost.toFixed(2);
+        }
+
+        setInterval(updateCost, 1000); // Обновляем каждую секунду
+    </script>
+</body>
+</html>
+
+

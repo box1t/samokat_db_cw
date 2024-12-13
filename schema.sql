@@ -79,6 +79,15 @@ CREATE TABLE rental_history (
     rental_id UUID NOT NULL,
     completion_date TIMESTAMP DEFAULT NOW(),
     duration INTERVAL NOT NULL,
+    CONSTRAINT fk_rental_history_rentals FOREIGN KEY (rental_id) REFERENCES rentals(rental_id) ON DELETE CASCADE
+);
+
+
+CREATE TABLE rental_history (
+    history_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    rental_id UUID NOT NULL,
+    completion_date TIMESTAMP DEFAULT NOW(),
+    duration INTERVAL NOT NULL,
     summary TEXT,
     CONSTRAINT fk_rental_history_rentals FOREIGN KEY (rental_id) REFERENCES rentals(rental_id) ON DELETE CASCADE
 );
