@@ -107,71 +107,13 @@ async def get_user_by_id(pool: asyncpg.pool.Pool, user_id: str):
 
 """
 
-# это делает админ в manage_products
-async def get_all_products(pool):
-    """
-    Получить список всех продуктов.
-    """
-    async with pool.acquire() as conn:
-        return await conn.fetch("""
-            SELECT product_id, name, description, price, stock, manufacturer
-            FROM products
-        """)
-
-# Получение информации на странице продукта
-async def get_product_by_id(pool: asyncpg.pool.Pool, product_id: str):
-    """
-    Получить информацию о продукте по его ID.
-    """
-    async with pool.acquire() as conn:
-        return await conn.fetchrow("""
-            SELECT * FROM products WHERE product_id = $1
-        """, product_id)
-
-# Это делает админ в manage products
-async def add_product(pool, name, description, price, stock, manufacturer, category_id=None):
-    async with pool.acquire() as conn:
-        await conn.execute("""
-            INSERT INTO products (product_id, name, description, price, stock, manufacturer, category_id)
-            VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6)
-        """, name, description, price, stock, manufacturer, category_id)
-
-# Это делает админ в manage products
-async def update_product(pool, product_id, name, description, price, stock, manufacturer, category_id=None):
-    async with pool.acquire() as conn:
-        await conn.execute("""
-            UPDATE products
-            SET name = $1, description = $2, price = $3, stock = $4, manufacturer = $5, category_id = $6
-            WHERE product_id = $7
-        """, name, description, price, stock, manufacturer, category_id, product_id)
-
-# Это делает админ в manage products
-async def delete_product(pool, product_id):
-    async with pool.acquire() as conn:
-        await conn.execute("""
-            DELETE FROM products WHERE product_id = $1
-        """, product_id)
-
-
-# Это делает админ в manage products
-async def get_all_products_with_categories(pool):
-    async with pool.acquire() as conn:
-        return await conn.fetch("""
-            SELECT p.*, c.name AS category_name
-            FROM products p
-            LEFT JOIN categories c ON p.category_id = c.category_id
-            ORDER BY p.name
-        """)
-##  get_all_products_with_categories Заменится на что? Что делает этот запрос? продукт МБ без категории? Самокат без локации? Кажется, сама модель данных это устранит
-## Это нужно для админ панели. зачем-то.. в каком виде это выводится админу на фронте? а в цифрах?
-
 
 ## По каким критериям будем искать самокат?
 
 # Для поиска на главной странице home
 async def search_products(pool: asyncpg.pool.Pool, query: str = '', category_id: str = '', manufacturer: str = ''):
     """
-    Поиск товаров по названию, описанию, категории и производителю.
+    Поиск товаров по всем параметрам сразу.
     """
     async with pool.acquire() as conn:
         sql = """
@@ -217,6 +159,70 @@ async def get_all_manufacturers(pool: asyncpg.pool.Pool):
         """)
         # Преобразуем список записей в список строк
         return [record['manufacturer'] for record in records]
+
+# Получение информации на странице продукта
+async def get_product_by_id(pool: asyncpg.pool.Pool, product_id: str):
+    """
+    Получить всю информацию о продукте по его ID.
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetchrow("""
+            SELECT * FROM products WHERE product_id = $1
+        """, product_id)
+
+# это делает админ в manage_products
+async def get_all_products(pool):
+    """
+    Получить список всех продуктов.
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetch("""
+            SELECT product_id, name, description, price, stock, manufacturer
+            FROM products
+        """)
+
+# Это делает админ в manage products
+# Добавление нестрогое, могут быть пустые поля. Строгих требований к админу нет.
+# окей, но если товар существует?
+
+async def add_product(pool, name, description, price, stock, manufacturer, category_id=None):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO products (product_id, name, description, price, stock, manufacturer, category_id)
+            VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6)
+        """, name, description, price, stock, manufacturer, category_id)
+
+# Это делает админ в manage products
+async def update_product(pool, product_id, name, description, price, stock, manufacturer, category_id=None):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE products
+            SET name = $1, description = $2, price = $3, stock = $4, manufacturer = $5, category_id = $6
+            WHERE product_id = $7
+        """, name, description, price, stock, manufacturer, category_id, product_id)
+
+# Это делает админ в manage products
+async def delete_product(pool, product_id):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            DELETE FROM products WHERE product_id = $1
+        """, product_id)
+
+
+# Это делает админ в manage products
+async def get_all_products_with_categories(pool):
+    async with pool.acquire() as conn:
+        return await conn.fetch("""
+            SELECT p.*, c.name AS category_name
+            FROM products p
+            LEFT JOIN categories c ON p.category_id = c.category_id
+            ORDER BY p.name
+        """)
+##  get_all_products_with_categories Заменится на что? Что делает этот запрос? продукт МБ без категории? Самокат без локации? Кажется, сама модель данных это устранит
+## Это нужно для админ панели. зачем-то.. в каком виде это выводится админу на фронте? а в цифрах?
+
+
+
 
 
 ######################################################################
@@ -382,23 +388,33 @@ async def delete_category(pool: asyncpg.pool.Pool, category_id: str):
 
 
 # для добавления в корзину; для повторения заказа
+# но здесь нет проверки на общее кол-во товаров.
+# здесь почему-то можно селектором увеличить кол-во
+# но это неплохо, не так ли? 
+# нигде нет проверки! но можно сделать запрет на покупку, если ч. превышает stock. но этого я делать не буду.
+# как мне пригодится этот функционал?
+
+
 async def add_to_cart(pool: asyncpg.pool.Pool, user_id: str, product_id: str, quantity: int):
     """
     Добавить товар в корзину пользователя.
+
+    1. Проверяем, есть ли этот товар в корзине пользователя. (а разве тут есть проверка?)
+    2. 
+
+    3. Если товар существует, обновляем количество товара в корзине
+    4. Иначе добавляем новый product_id в cart. 
     """
+
     async with pool.acquire() as conn:
-        # Проверяем, есть ли уже этот товар в корзине пользователя
         existing = await conn.fetchrow("""
             SELECT quantity FROM cart WHERE user_id = $1 AND product_id = $2
         """, user_id, product_id)
-
         if existing:
-            # Обновляем количество товара в корзине
             await conn.execute("""
                 UPDATE cart SET quantity = quantity + $1 WHERE user_id = $2 AND product_id = $3
             """, quantity, user_id, product_id)
         else:
-            # Добавляем новый товар в корзину
             await conn.execute("""
                 INSERT INTO cart (user_id, product_id, quantity)
                 VALUES ($1, $2, $3)
@@ -417,10 +433,12 @@ async def get_cart_items(pool: asyncpg.pool.Pool, user_id: str):
         """, user_id)
 
 
-# Для загрузки страницы корзины пользователя cart
+# Для route - remove_item_from_cart
 async def remove_from_cart(pool: asyncpg.pool.Pool, user_id: str, product_id: str):
     """
     Удалить товар из корзины пользователя.
+
+    1. Какой вид удаления из корзины?
     """
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -429,6 +447,8 @@ async def remove_from_cart(pool: asyncpg.pool.Pool, user_id: str, product_id: st
 
 # Для загрузки страницы корзины пользователя cart. 
 # Проверку на неотрицательность, видимо, проще делать в коде запросом.
+
+# Это может быть переиспользовано для проверки уровня заряда или локации?
 async def update_cart_quantities(pool: asyncpg.pool.Pool, user_id: str, quantities: dict):
     """
     Обновить количество товаров в корзине пользователя.
@@ -591,7 +611,13 @@ async def get_all_orders(pool):
             JOIN users u ON o.user_id = u.user_id
             ORDER BY o.order_date DESC
         """)
+    
 # для админа: логика управления всеми заказами
+# Что если обновление статуса поездки будет не только админом, но автоматически (триггер/функция) 
+# при пайплайне аренды?
+# и если дополнять шоп, то пользователь при получении (нужен доп функционал) будет обновлять его.
+# какой функционал тут не прописан? какие вопросы можно задать, чтобы выяснить, какого функционала не хватает для обновления статуса заказа ПОЛЬЗОВАТЕЛЕМ?
+# верно ли я понимаю, что пайплайн не включает в себя обновление статуса заказа пользователем?
 async def update_order_status(pool, order_id, new_status):
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -618,6 +644,25 @@ async def update_order_status(pool, order_id, new_status):
 
 
 """
+
+# Отзыв можно: добавить на странице продукта, получить его на странице продукта (обновив страничку), и получить средний рейтинг.
+# По сути отзыв - это оставление коммента.
+# Отзыв к поездке или к аренде - это уже усложнение и доп сущности, судя по всему.
+# Отзывы напрямую зависят от пайплайна заказа. 
+# Здесь же не требуется оформлять заказ для оставления отзыва. Отзыв привязан только к товару.
+# Отзыв, оплата - это окончание пайплайна классической аренды. Либо пайплайн будет иным.
+# Если в моем пайплайне аренды нет привязки, я могу оставить в любое время. Тогда еще чего нет?
+# Тогда нет и завершения, получения.
+# Его же действительно нет, поскольку пользователь не может обновить статус заказа.
+# Оставление отзывов завязано на возможности пользователем обновить статус заказа. Но явно это не прописано в виде сущностей. 
+# Это ведь просто функционал. А функционал не привязан к таким сущностям, это скорее метауровень, архитектура, модель. так?
+# Что я буду с этим делать?
+# 1. Подведу итоги всему пайплайну магазина на основе таблицы того, что может пользователь и админ. Это помещу в ридми.
+# 2. Подведу итоги, как мог выглядеть реальный пайплайн магазина (это для питон проекта пригодится). Усложнения будут направлены в сторону цены, функционала пользователя.
+# 3. Сравню минимальный пайплайн магазина с минимумом аренды.
+# 4. Составлю реальную аренду, сравню с реальным магазином.
+# Или поменяю местами шаги 3-4.
+
 
 # Для логики страницы продукта
 async def add_review(pool: asyncpg.pool.Pool, product_id: str, user_id: str, rating: int, comment: str):

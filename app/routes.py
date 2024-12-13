@@ -93,7 +93,7 @@ async def profile():
     3. Вызов get_last_orders - 5 заказов на страницу.
     4. Рендер шаблона profile.html
     """
-    
+
     user_id = session.get("user_id")
     if not user_id:
         await flash("Пожалуйста, войдите в систему.", "warning")
@@ -246,7 +246,22 @@ async def logout():
 async def product_page(product_id):
     """
     Страница самоката с описанием и отзывами.
+    1. Привязка сессии к user_id на странице продукта.
+    
+    2. Вызов get_product_by_id, иначе - выброс на home.
+    3. Вызов get_reviews_by_product_id
+    4. Рендеринг шаблона
+
+    1.2. Если действия пользователя POST:
+    1.2.1. Если не авторизован - выброс на login, warning.
+    
+    1.3. Выставляем rating (selector), выставляем comment (form)
+    1.3.1. Если оценка not in (1, 5) - сброс product_page
+    1.3.2. Если комментарий пуст - сброс product_page
+
+    1.4. Выполняем add_review, иначе - ошибка, сброс product_page
     """
+
     user_id = session.get("user_id")
 
     if request.method == "POST":
@@ -424,6 +439,7 @@ async def place_order():
 async def repeat_order():
     """
     Повторить заказ.
+    ИЛИ ПОВТОРИТЬ ДОБАВЛЕНИЕ В КОРЗИНУ?
     """
     user_id = session.get("user_id")
     if not user_id:
