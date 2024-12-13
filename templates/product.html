@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ product.name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>{{ product.name }}</h1>
+        <nav>
+            <a href="{{ url_for('main.home') }}">Главная</a>
+            <a href="{{ url_for('main.cart') }}">Корзина</a>
+            {% if session.get('user_id') %}
+                <a href="{{ url_for('main.logout') }}">Выход</a>
+            {% else %}
+                <a href="{{ url_for('main.login') }}">Вход</a>
+                <a href="{{ url_for('main.register') }}">Регистрация</a>
+            {% endif %}
+        </nav>
+    </header>
+    <main>
+        <p><strong>Описание:</strong> {{ product.description }}</p>
+        <p><strong>Цена:</strong> {{ product.price }} ₽</p>
+        <p><strong>В наличии:</strong> {{ product.stock }}</p>
+        <p><strong>Производитель:</strong> {{ product.manufacturer }}</p>
+
+        <h2>Отзывы</h2>
+        {% if reviews %}
+            <ul>
+                {% for review in reviews %}
+                    <li>
+                        <p><strong>{{ review.username }}</strong> ({{ review.review_date.strftime('%Y-%m-%d %H:%M') }})</p>
+                        <p>Оценка: {{ review.rating }} / 5</p>
+                        <p>{{ review.comment }}</p>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Пока нет отзывов на этот товар.</p>
+        {% endif %}
+
+        {% if session.get('user_id') %}
+            <h3>Оставить отзыв</h3>
+            <form method="POST">
+                <p>
+                    <label for="rating">Оценка:</label>
+                    <select name="rating" id="rating">
+                        <option value="5">5</option>
+                        <option value="4">4</option>
+                        <option value="3">3</option>
+                        <option value="2">2</option>
+                        <option value="1">1</option>
+                    </select>
+                </p>
+                <p>
+                    <label for="comment">Комментарий:</label><br>
+                    <textarea name="comment" id="comment" rows="5" cols="50" required></textarea>
+                </p>
+                <button type="submit">Отправить отзыв</button>
+            </form>
+        {% else %}
+            <p><a href="{{ url_for('main.login') }}">Войдите в систему</a>, чтобы оставить отзыв.</p>
+        {% endif %}
+    </main>
+</body>
+</html>

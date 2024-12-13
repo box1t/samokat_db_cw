@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Управление заказами</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Управление заказами</h1>
+        <nav>
+            <a href="{{ url_for('admin.admin_dashboard') }}">Админка</a>
+            <a href="/logout">Выход</a>
+        </nav>
+    </header>
+    <main>
+        <h2>Список заказов</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Номер заказа</th>
+                    <th>Пользователь</th>
+                    <th>Дата заказа</th>
+                    <th>Общая стоимость</th>
+                    <th>Статус</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for order in orders %}
+                <tr>
+                    <td>{{ order.order_id }}</td>
+                    <td>{{ order.username }}</td>
+                    <td>{{ order.order_date }}</td>
+                    <td>{{ order.total_cost }} ₽</td>
+                    <td>{{ order.status }}</td>
+                    <td>
+                        <form method="POST" action="{{ url_for('admin.manage_orders') }}">
+                            <input type="hidden" name="order_id" value="{{ order.order_id }}">
+                            <select name="status">
+                                <option value="Pending" {% if order.status == 'Pending' %}selected{% endif %}>Pending</option>
+                                <option value="Processing" {% if order.status == 'Processing' %}selected{% endif %}>Processing</option>
+                                <option value="Shipped" {% if order.status == 'Shipped' %}selected{% endif %}>Shipped</option>
+                                <option value="Delivered" {% if order.status == 'Delivered' %}selected{% endif %}>Delivered</option>
+                                <option value="Cancelled" {% if order.status == 'Cancelled' %}selected{% endif %}>Cancelled</option>
+                            </select>
+                            <button type="submit">Обновить статус</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </main>
+</body>
+</html>

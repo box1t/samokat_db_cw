@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Профиль</title>
+    <link rel="stylesheet" href="../static/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Ваш профиль</h1>
+        <nav>
+            <a href="/">Главная</a>
+            <a href="/cart">Корзина</a>
+            <a href="/home">Профиль</a>
+            <a href="/logout">Выход</a>
+        </nav>
+    </header>
+    <main>
+        <h2>Добро пожаловать, {{ username }}!</h2>
+        <div class="profile-info">
+            <p><strong>Email:</strong> {{ email }}</p>
+        </div>
+        <section class="recent-orders">
+            <h3>Последние заказы</h3>
+            {% if last_orders %}
+                <ul>
+                    {% for order in last_orders %}
+                        <li>
+                            <p><strong>Дата заказа:</strong> {{ order.order_date }}</p>
+                            <p><strong>Стоимость:</strong> {{ order.total_cost }} ₽</p>
+                            <p><strong>Товары:</strong></p>
+                            <ul>
+                                {% for product in order.products %}
+                                    <li>{{ product }}</li>
+                                {% endfor %}
+                            </ul>
+                            <form method="POST" action="/repeat_order">
+                                <input type="hidden" name="order_id" value="{{ order.order_id }}">
+                                <button type="submit">Повторить заказ</button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>У вас пока нет заказов.</p>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

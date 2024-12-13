@@ -1,0 +1,12 @@
+<nav>
+    <a href="/">Главная</a>
+    <a href="/cart">Корзина</a>
+    {% if session.get('user_id') %}
+        <a href="/logout">Выход</a>
+        <a href="/profile">Профиль</a>
+    {% else %}
+        <a href="/login">Вход</a>
+        <a href="/register">Регистрация</a>
+    {% endif %}
+</nav>
+

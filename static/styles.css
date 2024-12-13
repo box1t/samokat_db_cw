@@ -1,0 +1,366 @@
+/* Основные стили */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #F5F5F5; /* Светлый фон */
+    color: #333; /* Темный текст для контраста */
+}
+
+h1 {
+    font-size: 3rem; /* Увеличенный шрифт заголовка */
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+h2 {
+    text-align: center;
+    margin-top: 1rem;
+}
+
+header h1 {
+    margin: 1;
+    font-size: 2.5rem;
+}
+
+header {
+    background-color: #0078FF; /* Основной синий цвет Ozon */
+    color: #FFFFFF; /* Белый для текста */
+    padding: 1rem;
+    text-align: center;
+}
+
+header nav a {
+    color: #FFFFFF; /* Белый текст */
+    margin: 0 1rem;
+    text-decoration: none;
+}
+
+header nav a:hover {
+    text-decoration: underline;
+}
+
+main {
+    padding: 2rem;
+    max-width: 1200px; /* Ограничение ширины страницы */
+    margin: 0 auto; /* Центрирование основного контента */
+}
+
+button {
+    background-color: #FF3366;
+    color: white;
+    font-size: 1rem;
+    padding: 0.7rem 1rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #E62E5D;
+}
+
+/* Форма поиска */
+.search-form {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: 1rem;
+    gap: 0.5rem;
+    background-color: #FFFFFF;
+    padding: 1rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    max-width: 100%;
+}
+
+.search-form input,
+.search-form select {
+    font-size: 1.2rem; /* Размер шрифта совпадает с кнопкой */
+    padding: 0.7rem; /* Внутренние отступы совпадают с кнопкой */
+    width: 100%;
+    max-width: 300px; /* Ограничение ширины совпадает с кнопкой */
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    flex: 1; /* Кнопка также займет равное пространство */
+    box-sizing: border-box;
+    margin-bottom: 1rem;
+}
+
+.search-form button {
+    background-color: #FF3366; /* Основной цвет */
+    color: white;
+    font-size: 1.2rem;
+    padding: 0.7rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    flex: 1; /* Кнопка также займет равное пространство */
+    width: 100%;
+    max-width: 300px;
+}
+
+form button:hover {
+    background-color: #E62E5D; /* Более темный цвет при наведении */
+}
+
+
+.search-form button {
+    background-color: #FF3366; /* Основной цвет */
+    color: white;
+    font-size: 1.2rem;
+    padding: 0.7rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+    max-width: 300px;
+}
+
+form button {
+    background-color: #FF3366; /* Основной цвет */
+    color: white;
+    font-size: 1.2rem;
+    padding: 0.7rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+    max-width: 300px;
+    margin-bottom: 1rem;
+}
+
+form button:hover {
+    background-color: #E62E5D;
+}
+
+/* Список товаров */
+.product-list {
+    list-style: none;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem; /* Расстояние между карточками */
+    justify-content: center; /* Центрирование карточек */
+}
+
+.product-item {
+    border: 1px solid #E0E0E0;
+    border-radius: 10px;
+    padding: 1rem;
+    background-color: #FFFFFF;
+    text-align: center; /* Центрирование текста в карточке */
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    width: 300px; /* Фиксированная ширина карточки */
+}
+
+.product-item h3 {
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    color: #4A148C; /* Темно-фиолетовый цвет */
+}
+
+.product-item p {
+    font-size: 1rem;
+    margin: 0.5rem 0;
+}
+
+.product-item form {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Центрирование формы */
+    gap: 0.5rem; /* Расстояние между элементами */
+    margin-top: 1rem;
+}
+
+.product-item input[type="number"] {
+    width: 100%;
+    max-width: 150px; /* Единая ширина поля ввода */
+    padding: 0.5rem;
+    font-size: 1rem;
+    text-align: center;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.product-item button {
+    background-color: #FF3366;
+    color: white;
+    font-size: 1rem;
+    border: none;
+    padding: 0.7rem 1rem;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+    max-width: 150px; /* Единая ширина кнопки */
+}
+
+.product-item button:hover {
+    background-color: #E62E5D;
+}
+
+.search-section {
+    margin-bottom: 2rem;
+    text-align: center; /* Центрирование */
+}
+
+.cart-section {
+    margin-top: 2rem;
+}
+
+.cart-table {
+    width: 100%;
+    max-width: 800px;
+    border-collapse: collapse;
+    margin: 0 auto;
+}
+
+.cart-table th, .cart-table td {
+    text-align: left;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+}
+
+.cart-table td input[type="number"] {
+    width: 1000px; /* Установите подходящую ширину */
+    padding: 5rem;
+    font-size: 1rem;
+    border: 5px solid #ccc;
+    border-radius: 5px;
+    text-align: center;
+}
+
+table tbody input[type="number"] {
+    width: 40px; /* Установите нужную ширину */
+    padding: 0.5rem; /* Внутренние отступы */
+    font-size: 1rem; /* Размер шрифта */
+    text-align: center; /* Центрирование текста */
+    border: 1px solid #ccc; /* Цвет границы */
+    border-radius: 5px; /* Скругленные углы */
+}
+
+.cart-summary {
+    text-align: center;
+    margin-top: 1rem;
+}
+
+.cart-summary button {
+    margin-top: 1rem;
+}
+
+
+
+/* Сообщения */
+.messages {
+    text-align: center;
+    font-size: 1.2rem; /* Увеличенный шрифт сообщений */
+    margin-bottom: 1rem;
+}
+
+.message {
+    padding: 1rem;
+    border-radius: 5px;
+    margin-bottom: 0.5rem;
+}
+
+.message.success {
+    background-color: #D4EDDA;
+    color: #155724;
+    border: 1px solid #C3E6CB;
+}
+
+.message.danger {
+    background-color: #F8D7DA;
+    color: #721C24;
+    border: 1px solid #F5C6CB;
+}
+
+.message.warning {
+    background-color: #FFF3CD;
+    color: #856404;
+    border: 1px solid #FFEEBA;
+}
+
+
+/* Стили для форм логина и регистрации */
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    align-items: center; /* Центрирование элементов */
+    justify-content: center;
+    background-color: #FFFFFF;
+    padding: 2rem;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Лёгкая тень */
+    max-width: 400px; /* Ограничение ширины формы */
+    margin: 0 auto; /* Центрирование формы */
+    gap: 1rem; /* Равномерное расстояние между элементами */
+}
+
+.auth-form label {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    align-self: flex-start; /* Выровнять метки по левому краю */
+}
+
+.auth-form input {
+    font-size: 1rem;
+    padding: 0.5rem;
+    width: 100%; /* Все поля одинаковой ширины */
+    margin-bottom: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box; /* Учитывать отступы */
+}
+
+.auth-form input[type="text"],
+.auth-form input[type="email"],
+.auth-form input[type="password"] {
+    font-size: 1rem;
+    padding: 0.5rem;
+    width: 100%;
+    margin-bottom: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    box-sizing: border-box;
+    background-color: #fff;
+    color: #333;
+}
+
+
+
+.auth-form button {
+    background-color: #FF3366; /* Основной цвет кнопки */
+    color: white;
+    font-size: 1rem;
+    padding: 0.7rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%; /* Кнопка занимает всю ширину формы */
+    max-width: 150px;
+}
+
+.auth-form button:hover {
+    background-color: #E62E5D; /* Темнее при наведении */
+}
+
+.auth-form a {
+    margin-top: 0.5rem;
+    text-decoration: none;
+    color: #0078FF; /* Синий цвет для ссылки */
+}
+
+.auth-form a:hover {
+    text-decoration: underline;
+}
+
+.auth-form .secondary-link {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+    color: #555; /* Более нейтральный цвет для вторичных ссылок */
+}
+
+.auth-form .secondary-link:hover {
+    color: #0078FF;
+}

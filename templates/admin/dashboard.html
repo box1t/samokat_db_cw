@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Административная панель</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Административная панель</h1>
+        <nav>
+            <a href="{{ url_for('main.home') }}">Главная</a>
+            <a href="{{ url_for('admin.admin_dashboard') }}">Админка</a>
+            <a href="{{ url_for('admin.manage_products') }}">Управление товарами</a>
+            <a href="{{ url_for('admin.manage_orders') }}">Управление заказами</a>
+            <a href="{{ url_for('admin.backup_database') }}">Резервное копирование</a>
+            <a href="{{ url_for('admin.restore_database') }}">Загрузка базы данных</a>
+            <a href="/logout">Выход</a>
+        </nav>
+    </header>
+    <main>
+        <h2>Добро пожаловать, администратор!</h2>
+        <p>Выберите действие из меню.</p>
+    </main>
+    
+</body>
+</html>

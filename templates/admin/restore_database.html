@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Восстановление базы данных</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        form {
+            max-width: 600px;
+            margin: auto;
+        }
+        label {
+            display: block;
+            margin-top: 15px;
+        }
+        select, input[type="checkbox"] {
+            margin-top: 5px;
+        }
+        button {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Восстановление базы данных</h1>
+        <nav>
+            <a href="{{ url_for('admin.admin_dashboard') }}">Админка</a>
+            <a href="{{ url_for('admin.manage_products') }}">Управление товарами</a>
+            <a href="{{ url_for('admin.manage_categories') }}">Управление категориями</a>
+            <a href="{{ url_for('admin.manage_orders') }}">Управление заказами</a>
+            <a href="{{ url_for('main.logout') }}">Выход</a>
+        </nav>
+    </header>
+    <main>
+        <h2>Выберите резервную копию для восстановления</h2>
+        <form method="POST" action="{{ url_for('admin.restore_database') }}">
+            <label for="backup_file">Файл резервной копии:</label>
+            <select name="backup_file" id="backup_file" required>
+                <option value="">-- Выберите файл --</option>
+                {% for file in backup_files %}
+                    <option value="{{ file }}">{{ file }}</option>
+                {% endfor %}
+            </select>
+
+            <label>
+                <input type="checkbox" name="confirm" value="yes" required>
+                Я подтверждаю, что хочу восстановить базу данных из этой резервной копии. Все текущие данные будут перезаписаны.
+            </label>
+
+            <button type="submit">Восстановить базу данных</button>
+        </form>
+    </main>
+</body>
+</html>

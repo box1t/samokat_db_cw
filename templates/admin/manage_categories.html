@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Управление категориями</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        form {
+            display: inline;
+        }
+        .action-buttons button {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Управление категориями</h1>
+        <nav>
+            <a href="{{ url_for('admin.admin_dashboard') }}">Админка</a>
+            <a href="{{ url_for('admin.manage_products') }}">Управление товарами</a>
+            <a href="{{ url_for('admin.manage_orders') }}">Управление заказами</a>
+            <a href="{{ url_for('admin.backup_database') }}">Резервное копирование</a>
+            <a href="{{ url_for('main.logout') }}">Выход</a>
+        </nav>
+    </header>
+    <main>
+        <h2>Список категорий</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Название</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for category in categories %}
+                <tr>
+                    <form method="POST" action="{{ url_for('admin.manage_categories') }}">
+                        <td>
+                            <input type="text" name="name" value="{{ category.name }}" required>
+                            <input type="hidden" name="category_id" value="{{ category.category_id }}">
+                        </td>
+                        <td class="action-buttons">
+                            <button type="submit" name="action" value="edit">Сохранить</button>
+                            <button type="submit" name="action" value="delete" onclick="return confirm('Вы уверены, что хотите удалить эту категорию?');">Удалить</button>
+                        </td>
+                    </form>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <h2>Добавить новую категорию</h2>
+        <form method="POST" action="{{ url_for('admin.manage_categories') }}">
+            <input type="hidden" name="action" value="add">
+            <p>
+                <label>Название:</label>
+                <input type="text" name="name" required>
+            </p>
+            <button type="submit">Добавить категорию</button>
+        </form>
+    </main>
+</body>
+</html>

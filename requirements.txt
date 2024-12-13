@@ -1,0 +1,4 @@
+quart               # Основной фреймворк
+bcrypt              # Для хэширования
+python-dotenv       # Для переменных окружения
+asyncpg             # Для асинхронной PostgreSQL

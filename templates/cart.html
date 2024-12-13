@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Корзина</title>
+    <link rel="stylesheet" href="../static/styles.css">
+</head>
+<body>
+    <header>
+        <h1>Ваша корзина</h1>
+        <nav>
+            <nav>
+                <a href="/">Главная</a>
+                <a href="/cart">Корзина</a>
+                <a href="/profile">Профиль</a>
+                <a href="/logout">Выход</a>
+            </nav>            
+        </nav>
+    </header>
+    <main>
+        {% if cart_items %}
+            <form method="POST" action="{{ url_for('main.update_cart') }}">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Товар</th>
+                            <th>Цена</th>
+                            <th>Количество</th>
+                            <th>Всего</th>
+                            <th>Действие</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in cart_items %}
+                            <tr>
+                                <td>{{ item.name }}</td>
+                                <td>{{ item.price }} ₽</td>
+                                <td>
+                                    <input type="number" name="quantities[{{ item.product_id }}]" value="{{ item.quantity }}" min="1" max="{{ item.stock }}">
+                                </td>
+                                <td>{{ item.total_cost }} ₽</td>
+                                <td>
+                                    <button type="submit" formaction="{{ url_for('main.remove_item_from_cart', product_id=item.product_id) }}">Удалить</button>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <p><strong>Общая стоимость:</strong> {{ total_cost }} ₽</p>
+                <button type="submit">Обновить корзину</button>
+            </form>
+            <form method="POST" action="{{ url_for('main.place_order') }}">
+                <button type="submit">Оформить заказ</button>
+            </form>
+        {% else %}
+            <p>Ваша корзина пуста.</p>
+        {% endif %}
+    </main>
+</body>
+</html>
