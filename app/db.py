@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
                             #Roles
 ######################################################################
 
-
+# используется в функции create_user в route register, также могло бы использоваться при создании админа в холодном старте
 async def get_role_id_by_name(pool: asyncpg.pool.Pool, role_name: str) -> int:
     """
     Получить ID роли по её имени.
@@ -24,33 +24,14 @@ async def get_role_id_by_name(pool: asyncpg.pool.Pool, role_name: str) -> int:
             logger.error(f"Роль с именем {role_name} не найдена.")
         return role_id
 
-async def get_user_roles(pool: asyncpg.pool.Pool, user_id: str):
-    """
-    Получить список ролей пользователя.
-    """
-    async with pool.acquire() as conn:
-        roles = await conn.fetch("""
-            SELECT r.name
-            FROM user_roles ur
-            JOIN roles r ON ur.role_id = r.role_id
-            WHERE ur.user_id = $1
-        """, user_id)
-        return [role['name'] for role in roles]
-
-async def get_user_by_id(pool: asyncpg.pool.Pool, user_id: str):
-    """
-    Получить информацию о пользователе по user_id.
-    """
-    async with pool.acquire() as conn:
-        return await conn.fetchrow("""
-            SELECT username, email
-            FROM users
-            WHERE user_id = $1
-        """, user_id)
-
+# Используется в register
 async def create_user(pool: asyncpg.pool.Pool, username: str, hashed_password: str, email: str):
     """
     Создать нового пользователя и вернуть его user_id.
+    
+    1. Генерация uuid
+    2. Вставка в таблицу users введенных данных
+    3. Получение user_id из таблицы user_roles по имени роли User (по умолчанию).
     """
     user_id = uuid.uuid4()
     async with pool.acquire() as conn:
@@ -66,6 +47,7 @@ async def create_user(pool: asyncpg.pool.Pool, username: str, hashed_password: s
         """, user_id, role_id)
     return user_id
 
+# Используется в login и register
 async def get_user_by_email(pool: asyncpg.pool.Pool, email: str):
     """
     Получить пользователя по email.
@@ -76,6 +58,32 @@ async def get_user_by_email(pool: asyncpg.pool.Pool, email: str):
         """, email)
 
 ### 1. Добавить админа при холодном старте
+# используется в utils для доступа к админке + перед стартом приложения
+async def get_user_roles(pool: asyncpg.pool.Pool, user_id: str):
+    """
+    Получить список ролей пользователя.
+    """
+    async with pool.acquire() as conn:
+        roles = await conn.fetch("""
+            SELECT r.name
+            FROM user_roles ur
+            JOIN roles r ON ur.role_id = r.role_id
+            WHERE ur.user_id = $1
+        """, user_id)
+        return [role['name'] for role in roles]
+
+# Используется в profile
+async def get_user_by_id(pool: asyncpg.pool.Pool, user_id: str):
+    """
+    Получить информацию о пользователе по user_id.
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetchrow("""
+            SELECT username, email
+            FROM users
+            WHERE user_id = $1
+        """, user_id)
+
 
 ######################################################################
                             #Products - scooters
@@ -99,6 +107,7 @@ async def get_user_by_email(pool: asyncpg.pool.Pool, email: str):
 
 """
 
+# это делает админ в manage_products
 async def get_all_products(pool):
     """
     Получить список всех продуктов.
@@ -109,6 +118,7 @@ async def get_all_products(pool):
             FROM products
         """)
 
+# Получение информации на странице продукта
 async def get_product_by_id(pool: asyncpg.pool.Pool, product_id: str):
     """
     Получить информацию о продукте по его ID.
@@ -118,6 +128,7 @@ async def get_product_by_id(pool: asyncpg.pool.Pool, product_id: str):
             SELECT * FROM products WHERE product_id = $1
         """, product_id)
 
+# Это делает админ в manage products
 async def add_product(pool, name, description, price, stock, manufacturer, category_id=None):
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -125,6 +136,7 @@ async def add_product(pool, name, description, price, stock, manufacturer, categ
             VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6)
         """, name, description, price, stock, manufacturer, category_id)
 
+# Это делает админ в manage products
 async def update_product(pool, product_id, name, description, price, stock, manufacturer, category_id=None):
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -133,15 +145,15 @@ async def update_product(pool, product_id, name, description, price, stock, manu
             WHERE product_id = $7
         """, name, description, price, stock, manufacturer, category_id, product_id)
 
+# Это делает админ в manage products
 async def delete_product(pool, product_id):
     async with pool.acquire() as conn:
         await conn.execute("""
             DELETE FROM products WHERE product_id = $1
         """, product_id)
 
-## Заменится на что? Что делает этот запрос? продукт МБ без категории? Самокат без локации? Кажется, сама модель данных это устранит
-## Это нужно для админ панели. зачем-то.. в каком виде это выводится админу на фронте? а в цифрах?
 
+# Это делает админ в manage products
 async def get_all_products_with_categories(pool):
     async with pool.acquire() as conn:
         return await conn.fetch("""
@@ -150,19 +162,13 @@ async def get_all_products_with_categories(pool):
             LEFT JOIN categories c ON p.category_id = c.category_id
             ORDER BY p.name
         """)
+##  get_all_products_with_categories Заменится на что? Что делает этот запрос? продукт МБ без категории? Самокат без локации? Кажется, сама модель данных это устранит
+## Это нужно для админ панели. зачем-то.. в каком виде это выводится админу на фронте? а в цифрах?
 
-
-async def get_product_by_id(pool: asyncpg.pool.Pool, product_id: str):
-    """
-    Получить информацию о продукте по его ID.
-    """
-    async with pool.acquire() as conn:
-        return await conn.fetchrow("""
-            SELECT * FROM products WHERE product_id = $1
-        """, product_id)
 
 ## По каким критериям будем искать самокат?
 
+# Для поиска на главной странице home
 async def search_products(pool: asyncpg.pool.Pool, query: str = '', category_id: str = '', manufacturer: str = ''):
     """
     Поиск товаров по названию, описанию, категории и производителю.
@@ -196,7 +202,8 @@ async def search_products(pool: asyncpg.pool.Pool, query: str = '', category_id:
 
         return await conn.fetch(sql, *params)
 
-## А тут? Список моделей?
+## А тут в самокатах заменим на Список моделей?
+# Для поиска на главной странице home
 async def get_all_manufacturers(pool: asyncpg.pool.Pool):
     """
     Получить список всех производителей.
@@ -330,7 +337,8 @@ FROM locations;
 #////////////////////////////////////////////////////////////
 
 
-
+# Для поиска на главной странице home, для админа в управлении продуктами; категориями
+# а что еще с локациями можно сделать? будто бы ничего. делать надо что-то с самокатами или заказами.
 async def get_all_categories(pool: asyncpg.pool.Pool):
     """
     Получить список всех категорий.
@@ -342,6 +350,7 @@ async def get_all_categories(pool: asyncpg.pool.Pool):
             ORDER BY name
         """)
 
+# Для админа в управлении категориями
 async def add_category(pool: asyncpg.pool.Pool, name: str):
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -349,6 +358,7 @@ async def add_category(pool: asyncpg.pool.Pool, name: str):
             VALUES (uuid_generate_v4(), $1)
         """, name)
 
+# Для админа в управлении категориями
 async def update_category(pool: asyncpg.pool.Pool, category_id: str, name: str):
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -357,6 +367,7 @@ async def update_category(pool: asyncpg.pool.Pool, category_id: str, name: str):
             WHERE category_id = $2
         """, name, category_id)
 
+# Для админа в управлении категориями
 async def delete_category(pool: asyncpg.pool.Pool, category_id: str):
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -370,7 +381,7 @@ async def delete_category(pool: asyncpg.pool.Pool, category_id: str):
 ######################################################################
 
 
-
+# для добавления в корзину; для повторения заказа
 async def add_to_cart(pool: asyncpg.pool.Pool, user_id: str, product_id: str, quantity: int):
     """
     Добавить товар в корзину пользователя.
@@ -393,6 +404,7 @@ async def add_to_cart(pool: asyncpg.pool.Pool, user_id: str, product_id: str, qu
                 VALUES ($1, $2, $3)
             """, user_id, product_id, quantity)
 
+# Для загрузки страницы корзины пользователя cart
 async def get_cart_items(pool: asyncpg.pool.Pool, user_id: str):
     """
     Получить все товары в корзине пользователя.
@@ -405,7 +417,7 @@ async def get_cart_items(pool: asyncpg.pool.Pool, user_id: str):
         """, user_id)
 
 
-
+# Для загрузки страницы корзины пользователя cart
 async def remove_from_cart(pool: asyncpg.pool.Pool, user_id: str, product_id: str):
     """
     Удалить товар из корзины пользователя.
@@ -415,6 +427,8 @@ async def remove_from_cart(pool: asyncpg.pool.Pool, user_id: str, product_id: st
             DELETE FROM cart WHERE user_id = $1 AND product_id = $2
         """, user_id, product_id)
 
+# Для загрузки страницы корзины пользователя cart. 
+# Проверку на неотрицательность, видимо, проще делать в коде запросом.
 async def update_cart_quantities(pool: asyncpg.pool.Pool, user_id: str, quantities: dict):
     """
     Обновить количество товаров в корзине пользователя.
@@ -543,7 +557,7 @@ WHERE re.user_id = 'current-user-id' AND re.end_time IS NULL;
 
 #////////////////////////////////////////////////////////////
 
-
+# Для создания страницы профиля пользователя
 async def get_last_orders(pool: asyncpg.pool.Pool, user_id: str):
     """
     Получить последние пять заказов пользователя.
@@ -562,12 +576,13 @@ async def get_last_orders(pool: asyncpg.pool.Pool, user_id: str):
             LIMIT 5
         """, user_id)
 
-
+# логика размещения заказа
 async def process_order(pool: asyncpg.pool.Pool, user_id: str):
     async with pool.acquire() as conn:
         # Вызов хранимой процедуры, которая сама проведет все операции
         await conn.execute("CALL process_user_order($1)", user_id)
 
+# для админа: логика управления всеми заказами
 async def get_all_orders(pool):
     async with pool.acquire() as conn:
         return await conn.fetch("""
@@ -576,7 +591,7 @@ async def get_all_orders(pool):
             JOIN users u ON o.user_id = u.user_id
             ORDER BY o.order_date DESC
         """)
-
+# для админа: логика управления всеми заказами
 async def update_order_status(pool, order_id, new_status):
     async with pool.acquire() as conn:
         await conn.execute("""
@@ -604,6 +619,7 @@ async def update_order_status(pool, order_id, new_status):
 
 """
 
+# Для логики страницы продукта
 async def add_review(pool: asyncpg.pool.Pool, product_id: str, user_id: str, rating: int, comment: str):
     """
     Добавить отзыв к товару.
@@ -614,6 +630,7 @@ async def add_review(pool: asyncpg.pool.Pool, product_id: str, user_id: str, rat
             VALUES ($1, $2, $3, $4)
         """, product_id, user_id, rating, comment)
 
+# для логики страницы продукта 
 async def get_reviews_by_product_id(pool: asyncpg.pool.Pool, product_id: str):
     """
     Получить все отзывы для данного товара.
@@ -627,6 +644,7 @@ async def get_reviews_by_product_id(pool: asyncpg.pool.Pool, product_id: str):
             ORDER BY r.review_date DESC
         """, product_id)
 
+# для процедурки/функции в schema.sql
 async def get_average_rating(pool: asyncpg.pool.Pool, product_id: str):
     async with pool.acquire() as conn:
         return await conn.fetchval("""

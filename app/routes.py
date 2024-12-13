@@ -44,7 +44,7 @@ async def load_user_roles():
 @main.route("/", methods=["GET"])
 async def home():
     """
-    Главная страница интернет-магазина с возможностью поиска и фильтрации.
+    Главная страница сайта с возможностью поиска и фильтрации.
     """
     try:
         query = request.args.get('q', '').strip()
@@ -87,7 +87,13 @@ async def home():
 async def profile():
     """
     Страница профиля пользователя.
+    
+    1. Создаётся сессия с привязкой к user_id, иначе - сброс на логин страницу, warning.
+    2. Поиск информации по user_id для вывода на странице профиля, иначе - сброс на home страницу, warning.
+    3. Вызов get_last_orders - 5 заказов на страницу.
+    4. Рендер шаблона profile.html
     """
+    
     user_id = session.get("user_id")
     if not user_id:
         await flash("Пожалуйста, войдите в систему.", "warning")
@@ -119,7 +125,15 @@ async def profile():
 async def register():
     """
     Регистрация нового пользователя.
+    
+    1. Форма запрашивает пользователя ввести username, email, password.
+    1.1. Если заполнены не все поля - сброс страницы, warning.
+    2. Создаётся хэш пароля для хранения в БД.
+    3. Вызываем get_user_by_email для проверки уникальности пользователя, иначе - сброс страницы, warning.
+    4. Вызываем create_user.
+    5. Если успешно, переброс на страницу login, иначе - сброс страницы, warning.
     """
+
     if request.method == "POST":
         logger.info("Начат процесс регистрации.")
         form = await request.form
@@ -162,7 +176,16 @@ async def register():
 async def login():
     """
     Авторизация пользователя.
+    
+    1. Форма запрашивает пользователя ввести email, password.
+    1.1. Если заполнены не все поля - сброс страницы, warning.
+    2. Вызываем get_user_by_email для проверки существования пользователя, 
+        иначе - сброс страницы, warning.
+    3. Вызываем проверку соответствия пароля: bcrypt.checkpw(введенный пароль, хранящийся пароль), 
+        иначе - сброс страницы, 2 вида warning (ошибка и ValueError).
+    4. Использование session для сохранения user_id, переброс на страницу home.
     """
+
     if request.method == "POST":
         logger.info("Начат процесс авторизации.")
         form = await request.form
@@ -222,7 +245,7 @@ async def logout():
 @main.route("/product/<product_id>", methods=["GET", "POST"])
 async def product_page(product_id):
     """
-    Страница товара с описанием и отзывами.
+    Страница самоката с описанием и отзывами.
     """
     user_id = session.get("user_id")
 

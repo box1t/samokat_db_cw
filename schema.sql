@@ -86,6 +86,7 @@ CREATE TABLE rental_history (
 ---------------какую выбрать?---------------------
 --------------------------------------------------
 --------------------------------------------------
+-- в истории комментарий не нужен, ибо это создаётся по триггеру
 
 
 -- Таблица reviews
@@ -101,7 +102,7 @@ CREATE TABLE reviews (
     CONSTRAINT fk_reviews_scooters FOREIGN KEY (scooter_id) REFERENCES scooters(scooter_id) ON DELETE CASCADE,
     CONSTRAINT fk_reviews_users FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
-
+-- в отзыве комментарий нужен.
 -- нужно ли summary и коммент? где этот функционал будет автоматический?
 
 

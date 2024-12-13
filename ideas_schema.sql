@@ -78,6 +78,8 @@ CREATE TABLE scooters (
     CONSTRAINT fk_scooters_locations FOREIGN KEY (location_id) REFERENCES locations(location_id) ON DELETE SET NULL
 );
 
+-- 1. Как обновляется статус товара в интернет-магазине и в самокате?? В магазине статус не хранится в явном виде, там он на фронте + в одном месте.
+-- 2. Я же буду хранить статус?
 
 
 -- -- Таблица cart
