@@ -388,11 +388,10 @@ async def get_average_rating_by_scooter(pool: asyncpg.pool.Pool, scooter_id: str
 
 
 ######################################################################
-                        #Locations (almost done)
+                            #Locations
 ######################################################################
 
 # Для поиска на главной странице home, для админа в управлении продуктами; категориями
-# а что еще с локациями можно сделать? будто бы ничего. делать надо что-то с самокатами или заказами.
 async def get_all_locations(pool: asyncpg.pool.Pool):
     """
     Получить список всех локаций.
@@ -403,7 +402,6 @@ async def get_all_locations(pool: asyncpg.pool.Pool):
             FROM locations
             ORDER BY name
         """)
-
 
 # Для админа в управлении локациями
 async def add_location(pool: asyncpg.pool.Pool, name: str, latitude: float, longitude: float):
@@ -438,103 +436,6 @@ async def delete_location(pool: asyncpg.pool.Pool, location_id: str):
             DELETE FROM locations 
             WHERE location_id = $1
         """, location_id)
-
-
-
-######################################################################
-                            #Cart - будет устранена. а что взамен?
-######################################################################
-
-
-# для добавления в корзину; для повторения заказа
-# но здесь нет проверки на общее кол-во товаров.
-# здесь почему-то можно селектором увеличить кол-во
-# но это неплохо, не так ли? 
-# нигде нет проверки! но можно сделать запрет на покупку, если ч. превышает stock. но этого я делать не буду.
-# как мне пригодится этот функционал?
-
-
-async def add_to_cart(pool: asyncpg.pool.Pool, user_id: str, product_id: str, quantity: int):
-    """
-    Добавить товар в корзину пользователя.
-
-    1. Проверяем, есть ли этот товар в корзине пользователя. (а разве тут есть проверка?)
-    2. 
-
-    3. Если товар существует, обновляем количество товара в корзине
-    4. Иначе добавляем новый product_id в cart. 
-    """
-
-    async with pool.acquire() as conn:
-        existing = await conn.fetchrow("""
-            SELECT quantity 
-            FROM cart 
-            WHERE user_id = $1 AND product_id = $2
-        """, user_id, product_id)
-        if existing:
-            await conn.execute("""
-                UPDATE cart SET quantity = quantity + $1 WHERE user_id = $2 AND product_id = $3
-            """, quantity, user_id, product_id)
-        else:
-            await conn.execute("""
-                INSERT INTO cart (user_id, product_id, quantity)
-                VALUES ($1, $2, $3)
-            """, user_id, product_id, quantity)
-
-# Для загрузки страницы корзины пользователя cart
-async def get_cart_items(pool: asyncpg.pool.Pool, user_id: str):
-    """
-    Получить все товары в корзине пользователя.
-    """
-    async with pool.acquire() as conn:
-        return await conn.fetch("""
-            SELECT product_id, name, description, price, stock, quantity, total_cost
-            FROM cart_details
-            WHERE user_id = $1
-        """, user_id)
-
-
-# Для route - remove_item_from_cart
-async def remove_from_cart(pool: asyncpg.pool.Pool, user_id: str, product_id: str):
-    """
-    Удалить товар из корзины пользователя.
-
-    1. Какой вид удаления из корзины?
-    """
-    async with pool.acquire() as conn:
-        await conn.execute("""
-            DELETE FROM cart WHERE user_id = $1 AND product_id = $2
-        """, user_id, product_id)
-
-# Для загрузки страницы корзины пользователя cart. 
-# Проверку на неотрицательность, видимо, проще делать в коде запросом.
-
-# Это может быть переиспользовано для проверки уровня заряда или локации?
-async def update_cart_quantities(pool: asyncpg.pool.Pool, user_id: str, quantities: dict):
-    """
-    Обновить количество товаров в корзине пользователя.
-    """
-    async with pool.acquire() as conn:
-        async with conn.transaction():
-            for product_id, quantity in quantities.items():
-                quantity = int(quantity)
-                if quantity <= 0:
-                    # Удаляем товар из корзины, если количество <= 0
-                    await conn.execute("""
-                        DELETE FROM cart WHERE user_id = $1 AND product_id = $2
-                    """, user_id, product_id)
-                else:
-                    # Проверяем доступность товара на складе
-                    stock = await conn.fetchval("""
-                        SELECT stock 
-                        FROM products 
-                        WHERE product_id = $1
-                    """, product_id)
-                    if quantity > stock:
-                        raise ValueError(f"Недостаточно товара на складе для продукта {product_id}")
-                    await conn.execute("""
-                        UPDATE cart SET quantity = $1 WHERE user_id = $2 AND product_id = $3
-                    """, quantity, user_id, product_id)
 
 
 ######################################################################
