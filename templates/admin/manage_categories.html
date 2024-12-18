@@ -20,8 +20,27 @@
         form {
             display: inline;
         }
-        .action-buttons button {
-            margin-right: 5px;
+        /* Стили для кнопок "Сохранить" и "Добавить" */
+        .action-buttons button, 
+        button[type="submit"] {
+            background-color: #28a745; /* Зеленый цвет */
+            color: white; /* Белый текст */
+            border: none; /* Убираем границу */
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .action-buttons button:hover, 
+        button[type="submit"]:hover {
+            background-color: #218838; /* Темнее при наведении */
+        }
+        /* Стили для кнопки "Удалить" */
+        .action-buttons button[name="action"][value="delete"] {
+            background-color: #dc3545; /* Красный цвет */
+        }
+        .action-buttons button[name="action"][value="delete"]:hover {
+            background-color: #c82333; /* Темно-красный при наведении */
         }
     </style>
 </head>
@@ -29,11 +48,9 @@
     <header>
         <h1>Управление категориями</h1>
         <nav>
-            <a href="{{ url_for('admin.admin_dashboard') }}">Админка</a>
-            <a href="{{ url_for('admin.manage_products') }}">Управление товарами</a>
-            <a href="{{ url_for('admin.manage_orders') }}">Управление заказами</a>
-            <a href="{{ url_for('admin.backup_database') }}">Резервное копирование</a>
-            <a href="{{ url_for('main.logout') }}">Выход</a>
+            <a href="{{ url_for('main.home') }}">Главная</a>
+            <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
+            <a href="/logout">Выход</a>
         </nav>
     </header>
     <main>

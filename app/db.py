@@ -2,13 +2,15 @@ import asyncpg
 import uuid
 import bcrypt
 import logging
+from datetime import datetime
+import math
 
 logger = logging.getLogger(__name__)
 
 
 
 ######################################################################
-                            #Roles
+                            #Roles (done)
 ######################################################################
 
 # используется в функции create_user в route register, также могло бы использоваться при создании админа в холодном старте
@@ -18,7 +20,9 @@ async def get_role_id_by_name(pool: asyncpg.pool.Pool, role_name: str) -> int:
     """
     async with pool.acquire() as conn:
         role_id = await conn.fetchval("""
-            SELECT role_id FROM roles WHERE name = $1
+            SELECT role_id 
+            FROM roles 
+            WHERE name = $1
         """, role_name)
         if not role_id:
             logger.error(f"Роль с именем {role_name} не найдена.")
@@ -47,14 +51,16 @@ async def create_user(pool: asyncpg.pool.Pool, username: str, hashed_password: s
         """, user_id, role_id)
     return user_id
 
-# Используется в login и register
+# Используется в login и register, поэтому допускается вывод *
 async def get_user_by_email(pool: asyncpg.pool.Pool, email: str):
     """
     Получить пользователя по email.
     """
     async with pool.acquire() as conn:
         return await conn.fetchrow("""
-            SELECT * FROM users WHERE email = $1
+            SELECT * 
+            FROM users 
+            WHERE email = $1
         """, email)
 
 ### 1. Добавить админа при холодном старте
@@ -72,7 +78,7 @@ async def get_user_roles(pool: asyncpg.pool.Pool, user_id: str):
         """, user_id)
         return [role['name'] for role in roles]
 
-# Используется в profile
+# Используется в profile, поэтому во избежание утечек выводим не *
 async def get_user_by_id(pool: asyncpg.pool.Pool, user_id: str):
     """
     Получить информацию о пользователе по user_id.
@@ -86,299 +92,352 @@ async def get_user_by_id(pool: asyncpg.pool.Pool, user_id: str):
 
 
 ######################################################################
-                            #Products - scooters
+                        #Scooters - search
 ######################################################################
 
-"""
-0. Пойми, с чем взаимодействуют самокаты.
-1. Копируй в гпт.
-2. Получи это + измененное что-то на основе модели данных.
-
-
-
-5. Взял связанные таблицы, относящиеся к данному классу. И проектируешь всю логику. Сначала меняешь подобные, затем добавляешь ещё.
-Как должен выглядеть результат? Сложно это описать?
-
-Страница, где тото тото.
-
-Вот и "сделай под это логику".
-
-6. Где хранятся статусы заказа?
-
-"""
-
-
-## По каким критериям будем искать самокат?
-
 # Для поиска на главной странице home
-async def search_products(pool: asyncpg.pool.Pool, query: str = '', category_id: str = '', manufacturer: str = ''):
+async def search_scooters(
+    pool: asyncpg.pool.Pool,
+    query: str = '',
+    location_id: str = '',
+    status: str = '',  # Новый параметр для статуса (например, 'available')
+    min_battery: int = 0
+):
     """
-    Поиск товаров по всем параметрам сразу.
+    Поиск самокатов по модели, локации, статусу и уровню заряда.
     """
     async with pool.acquire() as conn:
+        # Основной SQL-запрос
         sql = """
-            SELECT p.product_id, p.name, p.description, p.price, p.stock, p.manufacturer, c.name AS category_name
-            FROM products p
-            LEFT JOIN categories c ON p.category_id = c.category_id
-            WHERE TRUE
+            SELECT 
+                s.scooter_id, 
+                s.model, 
+                s.battery_level, 
+                s.status, 
+                l.name AS location_name
+            FROM scooters s
+            LEFT JOIN locations l ON s.location_id = l.location_id
         """
+        
+        # Условия поиска
+        conditions = []
         params = []
-        param_index = 1
 
         if query:
-            sql += f" AND (p.name ILIKE '%' || ${param_index} || '%' OR p.description ILIKE '%' || ${param_index} || '%')"
-            params.append(query)
-            param_index += 1
+            conditions.append("s.model ILIKE $1")
+            params.append(f"%{query}%")
+        
+        if location_id:
+            conditions.append(f"s.location_id = ${len(params) + 1}")
+            params.append(location_id)
 
-        if category_id:
-            sql += f" AND p.category_id = ${param_index}"
-            params.append(category_id)
-            param_index += 1
+        if status:
+            conditions.append(f"s.status = ${len(params) + 1}")
+            params.append(status)
+        
+        if min_battery > 0:
+            conditions.append(f"s.battery_level >= ${len(params) + 1}")
+            params.append(min_battery)
+        
+        # Добавляем WHERE и условия
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
 
-        if manufacturer:
-            sql += f" AND p.manufacturer = ${param_index}"
-            params.append(manufacturer)
-            param_index += 1
+        # Сортировка по модели
+        sql += " ORDER BY s.model"
 
-        sql += " ORDER BY p.name"
-
+        # Выполняем запрос
         return await conn.fetch(sql, *params)
 
-## А тут в самокатах заменим на Список моделей?
+
 # Для поиска на главной странице home
-async def get_all_manufacturers(pool: asyncpg.pool.Pool):
+async def get_all_locations(pool: asyncpg.pool.Pool):
     """
-    Получить список всех производителей.
+    Получить список всех локаций.
     """
     async with pool.acquire() as conn:
         records = await conn.fetch("""
-            SELECT DISTINCT manufacturer
-            FROM products
-            WHERE manufacturer IS NOT NULL AND manufacturer != ''
-            ORDER BY manufacturer
+            SELECT location_id, name, latitude, longitude
+            FROM locations
+            ORDER BY name
         """)
-        # Преобразуем список записей в список строк
-        return [record['manufacturer'] for record in records]
+        return [dict(record) for record in records]
 
-# Получение информации на странице продукта
-async def get_product_by_id(pool: asyncpg.pool.Pool, product_id: str):
+
+# Получение информации на странице scooter
+async def get_scooter_by_id(pool: asyncpg.pool.Pool, scooter_id: str):
     """
-    Получить всю информацию о продукте по его ID.
+    Получить информацию о самокате по его ID.
     """
     async with pool.acquire() as conn:
         return await conn.fetchrow("""
-            SELECT * FROM products WHERE product_id = $1
-        """, product_id)
+            SELECT s.*, l.name AS location_name
+            FROM scooters s
+            LEFT JOIN locations l ON s.location_id = l.location_id
+            WHERE s.scooter_id = $1
+        """, scooter_id)
 
-# это делает админ в manage_products
-async def get_all_products(pool):
+
+# это делает админ в manage_scooters
+async def get_all_scooters(pool):
     """
-    Получить список всех продуктов.
+    Получить список всех самокатов.
     """
     async with pool.acquire() as conn:
         return await conn.fetch("""
-            SELECT product_id, name, description, price, stock, manufacturer
-            FROM products
+            SELECT *
+            FROM scooters
+            ORDER BY battery_level
         """)
+    
+###############################################################################################################
+###############################################################################################################
+###############################################################################################################
 
-# Это делает админ в manage products
-# Добавление нестрогое, могут быть пустые поля. Строгих требований к админу нет.
-# окей, но если товар существует?
+# возможно, это станет заменой    
+async def get_scooters_with_options(pool, include_location: bool = True, order_by: str = 'model'):
+    """
+    Получить список самокатов с возможностью включения информации о локациях.
 
-async def add_product(pool, name, description, price, stock, manufacturer, category_id=None):
+    :param pool: asyncpg пул соединений
+    :param include_location: Флаг включения локаций в запрос
+    :param order_by: Поле для сортировки (например, 'model', 'battery_level')
+    """
     async with pool.acquire() as conn:
-        await conn.execute("""
-            INSERT INTO products (product_id, name, description, price, stock, manufacturer, category_id)
-            VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6)
-        """, name, description, price, stock, manufacturer, category_id)
+        base_query = """
+            SELECT s.scooter_id, s.model, s.battery_level, s.is_available, s.last_maintenance_date,
+                   s.battery_consumption, s.speed_limit
+        """
 
-# Это делает админ в manage products
-async def update_product(pool, product_id, name, description, price, stock, manufacturer, category_id=None):
+        if include_location:
+            base_query += ", l.name AS location_name, l.latitude, l.longitude"
+
+        base_query += """
+            FROM scooters s
+        """
+
+        if include_location:
+            base_query += """
+                LEFT JOIN locations l ON s.location_id = l.location_id
+            """
+
+        base_query += f"""
+            ORDER BY s.{order_by}
+        """
+
+        return await conn.fetch(base_query)
+
+
+
+## Пример с фильтрацией
+async def get_scooters_with_options(pool, include_location: bool = True, order_by: str = 'model', is_available: bool = None):
+    """
+    Получить список самокатов с фильтрацией по доступности.
+    """
     async with pool.acquire() as conn:
-        await conn.execute("""
-            UPDATE products
-            SET name = $1, description = $2, price = $3, stock = $4, manufacturer = $5, category_id = $6
-            WHERE product_id = $7
-        """, name, description, price, stock, manufacturer, category_id, product_id)
+        sql = """
+            SELECT s.scooter_id, s.model, s.battery_level, s.is_available, s.status, s.last_maintenance_date,
+                   s.battery_consumption, s.speed_limit
+        """
+        if include_location:
+            sql += ", l.name AS location_name"
 
-# Это делает админ в manage products
-async def delete_product(pool, product_id):
-    async with pool.acquire() as conn:
-        await conn.execute("""
-            DELETE FROM products WHERE product_id = $1
-        """, product_id)
+        sql += " FROM scooters s"
+
+        if include_location:
+            sql += " LEFT JOIN locations l ON s.location_id = l.location_id"
+
+        if is_available is not None:
+            sql += " WHERE s.is_available = $1"
+
+        sql += f" ORDER BY s.{order_by}"
+
+        params = [is_available] if is_available is not None else []
+        return await conn.fetch(sql, *params)
 
 
-# Это делает админ в manage products
-async def get_all_products_with_categories(pool):
+# для кого? админ и пользоватлеь?
+async def get_all_scooters_sorted(pool):
+    """
+    Получить все самокаты, отсортированные по заряду и локации.
+    """
     async with pool.acquire() as conn:
         return await conn.fetch("""
-            SELECT p.*, c.name AS category_name
-            FROM products p
-            LEFT JOIN categories c ON p.category_id = c.category_id
-            ORDER BY p.name
+            SELECT s.scooter_id, s.model, s.battery_level, s.is_available, s.last_maintenance_date, 
+                   l.name AS location_name
+            FROM scooters s
+            LEFT JOIN locations l ON s.location_id = l.location_id
+            ORDER BY s.battery_level ASC, l.name ASC
         """)
-##  get_all_products_with_categories Заменится на что? Что делает этот запрос? продукт МБ без категории? Самокат без локации? Кажется, сама модель данных это устранит
-## Это нужно для админ панели. зачем-то.. в каком виде это выводится админу на фронте? а в цифрах?
+###############################################################################################################
+###############################################################################################################
+###############################################################################################################
+
+
+# для админа
+async def service_scooters_in_location(pool, location_id):
+    """
+    Обслужить все самокаты в заданной локации: обновить дату обслуживания и сделать их недоступными.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE scooters
+            SET is_available = FALSE, 
+                last_maintenance_date = $1
+            WHERE location_id = $2
+        """, datetime.utcnow(), location_id)
+
+# либо админ, либо юзер
+async def update_scooter_availability(pool, scooter_id, is_available: bool):
+    """
+    Обновить доступность самоката вручную.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE scooters
+            SET is_available = $1
+            WHERE scooter_id = $2
+        """, is_available, scooter_id)
+
+# Это делает админ в manage_scooters
+async def add_scooter(pool, model, battery_level, is_available=True, location_id=None,
+                      battery_consumption=1.5, speed_limit=20.0, last_maintenance_date=None):
+    """
+    Добавить новый самокат в базу данных.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO scooters (scooter_id, model, battery_level, is_available, location_id, 
+                                 battery_consumption, speed_limit, last_maintenance_date)
+            VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7)
+        """, model, battery_level, is_available, location_id, 
+        battery_consumption, speed_limit, last_maintenance_date)
 
 
 
+# Это делает админ в manage_scooters
+async def update_scooter(pool, scooter_id, model, battery_level, is_available, 
+                         location_id=None, last_maintenance_date=None, 
+                         battery_consumption=1.5, speed_limit=20.0):
+    """
+    Обновить информацию о самокате.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE scooters
+            SET model = $1, 
+                battery_level = $2, 
+                is_available = $3, 
+                location_id = $4, 
+                last_maintenance_date = $5, 
+                battery_consumption = $6, 
+                speed_limit = $7
+            WHERE scooter_id = $8
+        """, model, battery_level, is_available, 
+            location_id, last_maintenance_date, 
+            battery_consumption, speed_limit, scooter_id)
+
+
+
+# Это делает админ в manage scooters
+async def delete_scooter(pool, scooter_id):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            DELETE FROM scooters WHERE scooter_id = $1
+        """, scooter_id)
+
+######################################################################
+                            #Reviews_on_scooters (last step)
+######################################################################
+
+# Для логики страницы scooter
+async def add_scooter_review(pool: asyncpg.pool.Pool, rental_id: str, scooter_id: str, user_id: str, rating: int, review_text: str):
+    """
+    Добавить отзыв к самокату.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO reviews (rental_id, scooter_id, user_id, rating, review_text)
+            VALUES ($1, $2, $3, $4, $5)
+        """, rental_id, scooter_id, user_id, rating, review_text)
+
+
+# для логики страницы продукта 
+async def get_reviews_by_scooter_id(pool: asyncpg.pool.Pool, scooter_id: str):
+    """
+    Получить все отзывы для данного самоката.
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetch("""
+            SELECT r.*, u.username
+            FROM reviews r
+            JOIN users u ON r.user_id = u.user_id
+            WHERE r.scooter_id = $1
+            ORDER BY r.review_date DESC
+        """, scooter_id)
+
+# для процедурки/функции в schema.sql
+async def get_average_rating_by_scooter(pool: asyncpg.pool.Pool, scooter_id: str):
+    """
+    Получить среднюю оценку для самоката.
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetchval("""
+            SELECT get_average_scooter_rating($1)
+        """, scooter_id)
 
 
 ######################################################################
-                            #Categories - locations. Основа бизнес-логики
+                        #Locations (almost done)
 ######################################################################
-
-"""
-
-0. Пойми, с чем взаимодействуют локации.
-1. Копируй в гпт.
-2. Получи это + измененное что-то на основе модели данных.
-3. Здесь будет объемно, т.к. на локации завязан фильтр на фронте. Отдельная страница. Первая пагинация - локации, вторая - самокаты.
-или нет смысла что-то менять?
-
-4. пагинация это часть логики бд или чья? страницы? в routes?
-
-
-
-
-5. Взял связанные таблицы, относящиеся к данному классу. И проектируешь всю логику. Сначала меняешь подобные, затем добавляешь ещё.
-Как должен выглядеть результат? Сложно это описать?
-
-Страница, где тото тото.
-
-Вот и "сделай под это логику".
-
-
-"""
-
-#////////////////////////////////////////////////////////////
-# 1. Получить список доступных самокатов в локации
-"""
-SELECT scooter_id, model, battery_level, last_location
-FROM Scooters
-WHERE is_available = TRUE
-AND last_location = %s;
-
-
-
-SELECT *
-FROM scooters
-WHERE location_id = '123-location-id'
-AND is_available = TRUE;
-
-
-
-"""
-
-# 2. Аренда: Создать запись и Обновить доступность самоката
-"""
-INSERT INTO Rentals (user_id, scooter_id, start_time)
-VALUES (%s, %s, NOW());
-
-
-UPDATE Scooters
-SET is_available = FALSE
-WHERE scooter_id = %s;
-
-"""
-
-# 3. Список всех категорий
-
-"""
-SELECT category_id, name
-FROM categories;
-
-"""
-
-# 4. Вывод популярных товаров
-
-"""
-SELECT product_id, name, description, price, stock, manufacturer
-FROM products
-WHERE stock > 0
-ORDER BY stock DESC -- По количеству на складе (популярность)
-LIMIT 10;
-
-"""
-
-# 5. Фильтр по категории
-
-"""
-SELECT product_id, name, description, price, stock, manufacturer
-FROM products
-WHERE category_id = 'selected-category-id' AND stock > 0;
-
-"""
-
-# 6. Список доступных самокатов на локации
-
-"""
-SELECT scooter_id, model, battery_level, location_id
-FROM scooters
-WHERE is_available = TRUE;
-
-"""
-
-
-# 7. Список локаций
-"""
-SELECT location_id, name, latitude, longitude
-FROM locations;
-
-"""
-
-
-
-# 3. Главная страница: сортировка по локации (это как: близость ко мне?)
-# 4. Сортировка по числу самокатов
-# 5. Сортировка по заряду самокатов
-# 6. Сложный фильтр (1 и 2) - но это просто join? Но в нем нет смысла, поэтому по локации и по числу ближних рядом.
-# 7. Кнопка перехода в профиль. Что будет в профиле? Там одна лишняя кнопка. Но что еще будет? история - logger!!
-# 8. Последние 5 заказов в профиле. Это уже не локации, это ЗАКАЗЫ, профиль. профиль - заказы.
-# 9. Фильтрация на основной странице уже сделана. Как именно? как её докрутить до моего требуемого состояния?
-
-
-
-#////////////////////////////////////////////////////////////
-
 
 # Для поиска на главной странице home, для админа в управлении продуктами; категориями
 # а что еще с локациями можно сделать? будто бы ничего. делать надо что-то с самокатами или заказами.
-async def get_all_categories(pool: asyncpg.pool.Pool):
+async def get_all_locations(pool: asyncpg.pool.Pool):
     """
-    Получить список всех категорий.
+    Получить список всех локаций.
     """
     async with pool.acquire() as conn:
         return await conn.fetch("""
-            SELECT category_id, name
-            FROM categories
+            SELECT location_id, name, latitude, longitude
+            FROM locations
             ORDER BY name
         """)
 
-# Для админа в управлении категориями
-async def add_category(pool: asyncpg.pool.Pool, name: str):
-    async with pool.acquire() as conn:
-        await conn.execute("""
-            INSERT INTO categories (category_id, name)
-            VALUES (uuid_generate_v4(), $1)
-        """, name)
 
-# Для админа в управлении категориями
-async def update_category(pool: asyncpg.pool.Pool, category_id: str, name: str):
+# Для админа в управлении локациями
+async def add_location(pool: asyncpg.pool.Pool, name: str, latitude: float, longitude: float):
+    """
+    Добавить новую локацию.
+    """
     async with pool.acquire() as conn:
         await conn.execute("""
-            UPDATE categories
-            SET name = $1
-            WHERE category_id = $2
-        """, name, category_id)
+            INSERT INTO locations (location_id, name, latitude, longitude)
+            VALUES (uuid_generate_v4(), $1, $2, $3)
+        """, name, latitude, longitude)
 
-# Для админа в управлении категориями
-async def delete_category(pool: asyncpg.pool.Pool, category_id: str):
+# Для админа в управлении локациями
+async def update_location(pool: asyncpg.pool.Pool, location_id: str, name: str, latitude: float, longitude: float):
+    """
+    Обновить данные существующей локации.
+    """
     async with pool.acquire() as conn:
         await conn.execute("""
-            DELETE FROM categories WHERE category_id = $1
-        """, category_id)
+            UPDATE locations
+            SET name = $1, latitude = $2, longitude = $3
+            WHERE location_id = $4
+        """, name, latitude, longitude, location_id)
+
+# Для админа в управлении локациями
+async def delete_location(pool: asyncpg.pool.Pool, location_id: str):
+    """
+    Удалить локацию по её ID.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            DELETE FROM locations 
+            WHERE location_id = $1
+        """, location_id)
 
 
 
@@ -408,7 +467,9 @@ async def add_to_cart(pool: asyncpg.pool.Pool, user_id: str, product_id: str, qu
 
     async with pool.acquire() as conn:
         existing = await conn.fetchrow("""
-            SELECT quantity FROM cart WHERE user_id = $1 AND product_id = $2
+            SELECT quantity 
+            FROM cart 
+            WHERE user_id = $1 AND product_id = $2
         """, user_id, product_id)
         if existing:
             await conn.execute("""
@@ -465,7 +526,9 @@ async def update_cart_quantities(pool: asyncpg.pool.Pool, user_id: str, quantiti
                 else:
                     # Проверяем доступность товара на складе
                     stock = await conn.fetchval("""
-                        SELECT stock FROM products WHERE product_id = $1
+                        SELECT stock 
+                        FROM products 
+                        WHERE product_id = $1
                     """, product_id)
                     if quantity > stock:
                         raise ValueError(f"Недостаточно товара на складе для продукта {product_id}")
@@ -475,223 +538,261 @@ async def update_cart_quantities(pool: asyncpg.pool.Pool, user_id: str, quantiti
 
 
 ######################################################################
-                            #Orders - rentals. Основа бизнес-логики
+                            #Orders - rentals. (second step)
 ######################################################################
 
-"""
 
-0. Пойми, с чем взаимодействуют самокаты.
-1. Копируй в гпт.
-2. Получи это + измененное что-то на основе модели данных.
+# Для создания страницы профиля пользователя
+async def get_rental_count_by_scooter(pool: asyncpg.pool.Pool, scooter_id: str):
+    """
+    Возвращает количество аренд конкретного самоката.
+    """
+    sql = """
+        SELECT COUNT(*) AS rental_count
+        FROM rentals
+        WHERE scooter_id = $1;
+    """
+    async with pool.acquire() as conn:
+        result = await conn.fetchval(sql, scooter_id)
+        return result
+    
+# Для создания страницы профиля пользователя
+async def get_avg_rental_duration_by_scooter(pool: asyncpg.pool.Pool, scooter_id: str):
+    """
+    Возвращает среднюю продолжительность аренды самоката в минутах.
+    """
+    sql = """
+        SELECT AVG(EXTRACT(EPOCH FROM (end_time - start_time)) / 60) AS avg_duration
+        FROM rentals
+        WHERE scooter_id = $1 AND end_time IS NOT NULL;
+    """
+    async with pool.acquire() as conn:
+        result = await conn.fetchval(sql, scooter_id)
+        return result
 
-3. насколько сильно придется увеличить логику orders?
-
-"""
-
-#////////////////////////////////////////////////////////////
-
-#1. Гарантия уникальности аренды
-"""
-ALTER TABLE rentals
-ADD CONSTRAINT unique_active_rental_per_scooter
-UNIQUE (scooter_id, end_time);
-
-"""
-
-# 2. Сколько раз был арендован конкретный самокат
-"""
-SELECT scooter_id, COUNT(*) AS rental_count
-FROM rentals
-GROUP BY scooter_id;
-
-"""
-
-# 3. Средняя продолжительность аренды
-
-"""
-SELECT AVG(EXTRACT(EPOCH FROM (end_time - start_time)) / 60) AS avg_duration
-FROM rentals;
-
-"""
-
-# 4. Создание аренды
-
-"""
-INSERT INTO rentals (rental_id, user_id, scooter_id, rate_id, start_time)
-VALUES (uuid_generate_v4(), 'user-id', 'scooter-id', 1, NOW());
-
-"""
-
-# 5. Завершение аренды
-
-"""
-UPDATE rentals
-SET end_time = NOW(), total_price = TIMESTAMPDIFF(MINUTE, start_time, NOW()) * 0.10
-WHERE rental_id = 'rental-id';
-
-"""
+async def get_last_completed_rental(pool, user_id, scooter_id):
+    """
+    Возвращает последнюю завершенную аренду для указанного пользователя и самоката.
+    """
+    sql = """
+        SELECT rental_id
+        FROM rentals
+        WHERE user_id = $1 AND scooter_id = $2 AND status = 'completed'
+        ORDER BY end_time DESC
+        LIMIT 1;
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetchval(sql, user_id, scooter_id)
 
 
-# 6. Информация о текущей поездке (это аналог или не аналог корзины?)  
-# Расчёт текущей стоимости (если аренда поминутная):
-
-"""
-SELECT (EXTRACT(EPOCH FROM NOW() - start_time) / 60) * r.price_per_minute AS current_price
-FROM rentals re
-JOIN rates r ON re.rate_id = r.rate_id
-WHERE re.rental_id = 'current-rental-id';
-
-"""
-
-# 7. Общее время аренды
-
-"""
-SELECT NOW() - start_time AS duration
-FROM rentals
-WHERE rental_id = 'current-rental-id';
-
-"""
-
-# Информация:
-
-#     Модель самоката: Xiaomi Mi Scooter 3
-#     Уровень заряда: 85%
-#     Начало аренды: 12:30 13/12/2024
-#     Локация: ТЦ Москва
-#     Текущая стоимость: 120.50 ₽
-#     Время аренды: 15 минут
+async def get_rental_by_id(pool, rental_id, user_id, scooter_id):
+    """
+    Проверяет, существует ли завершенная аренда для пользователя, самоката и rental_id.
+    """
+    sql = """
+        SELECT 1
+        FROM rentals
+        WHERE rental_id = $1 AND user_id = $2 AND scooter_id = $3 AND status = 'completed';
+    """
+    async with pool.acquire() as conn:
+        result = await conn.fetchval(sql, rental_id, user_id, scooter_id)
+        return result
 
 
-"""
+async def add_scooter_review(pool, rental_id, scooter_id, user_id, rating, review_text):
+    """
+    Добавляет отзыв в таблицу reviews.
+    """
+    sql = """
+        INSERT INTO reviews (rental_id, scooter_id, user_id, rating, review_text, review_date)
+        VALUES ($1, $2, $3, $4, $5, NOW());
+    """
+    async with pool.acquire() as conn:
+        await conn.execute(sql, rental_id, scooter_id, user_id, rating, review_text)
 
-SELECT s.model, s.battery_level, re.start_time, l.name AS location_name, 
-       (EXTRACT(EPOCH FROM NOW() - re.start_time) / 60) * r.price_per_minute AS current_price,
-       NOW() - re.start_time AS duration
-FROM rentals re
-JOIN scooters s ON re.scooter_id = s.scooter_id
-JOIN locations l ON s.location_id = l.location_id
-JOIN rates r ON re.rate_id = r.rate_id
-WHERE re.user_id = 'current-user-id' AND re.end_time IS NULL;
+async def get_completed_rentals_by_user_and_scooter(pool, user_id, scooter_id):
+    """
+    Возвращает список завершенных аренд пользователя для конкретного самоката.
+    """
+    sql = """
+        SELECT rental_id, start_time, end_time, distance_km
+        FROM rentals
+        WHERE user_id = $1 AND scooter_id = $2 AND status = 'completed';
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetch(sql, user_id, scooter_id)
 
-"""
 
 #////////////////////////////////////////////////////////////
 
 # Для создания страницы профиля пользователя
-async def get_last_orders(pool: asyncpg.pool.Pool, user_id: str):
+async def get_last_rentals(pool: asyncpg.pool.Pool, user_id: str) -> list:
     """
-    Получить последние пять заказов пользователя.
+    Получить последние пять аренд пользователя.
     """
     async with pool.acquire() as conn:
-        return await conn.fetch("""
-            SELECT o.order_id, o.order_date, o.total_cost, ARRAY(
-                SELECT p.name
-                FROM order_items oi
-                JOIN products p ON oi.product_id = p.product_id
-                WHERE oi.order_id = o.order_id
-            ) AS products
-            FROM orders o
-            WHERE o.user_id = $1
-            ORDER BY o.order_date DESC
+        return await conn.fetch(
+            """
+            SELECT r.rental_id, r.start_time, r.end_time, r.total_price, r.status,
+                   l1.location_name AS start_location, l2.location_name AS end_location
+            FROM rentals r
+            LEFT JOIN locations l1 ON r.start_location_id = l1.location_id
+            LEFT JOIN locations l2 ON r.end_location_id = l2.location_id
+            WHERE r.user_id = $1
+            ORDER BY r.start_time DESC
             LIMIT 5
-        """, user_id)
+            """, user_id
+        )
 
-# логика размещения заказа
-async def process_order(pool: asyncpg.pool.Pool, user_id: str):
+# логика обработки аренды. не факт, что хорошая.
+
+##### Possible procedure
+
+#////////////////////////////////////////////////////////////
+#////////////////////////////////////////////////////////////
+async def process_rental(pool: asyncpg.pool.Pool, user_id: str, scooter_id: str, start_location_id: str):
+    """
+    Вызов хранимой процедуры для старта аренды самоката.
+    """
     async with pool.acquire() as conn:
-        # Вызов хранимой процедуры, которая сама проведет все операции
-        await conn.execute("CALL process_user_order($1)", user_id)
+        await conn.execute(
+            "CALL process_user_rental($1, $2, $3)",
+            user_id, scooter_id, start_location_id
+        )
+#////////////////////////////////////////////////////////////
+#////////////////////////////////////////////////////////////
 
 # для админа: логика управления всеми заказами
-async def get_all_orders(pool):
+async def get_all_rentals(pool: asyncpg.pool.Pool) -> list:
+    """
+    Получить все аренды с информацией о пользователях и локациях для админа.
+    """
     async with pool.acquire() as conn:
-        return await conn.fetch("""
-            SELECT o.order_id, o.user_id, u.username, o.total_cost, o.order_date, o.status
-            FROM orders o
-            JOIN users u ON o.user_id = u.user_id
-            ORDER BY o.order_date DESC
-        """)
+        return await conn.fetch(
+            """
+            SELECT r.rental_id, r.user_id, u.username, r.scooter_id, 
+                   l1.location_name AS start_location, l2.location_name AS end_location, 
+                   r.start_time, r.end_time, r.total_price, r.status
+            FROM rentals r
+            JOIN users u ON r.user_id = u.user_id
+            LEFT JOIN locations l1 ON r.start_location_id = l1.location_id
+            LEFT JOIN locations l2 ON r.end_location_id = l2.location_id
+            ORDER BY r.start_time DESC
+            """
+        )
     
 # для админа: логика управления всеми заказами
-# Что если обновление статуса поездки будет не только админом, но автоматически (триггер/функция) 
-# при пайплайне аренды?
-# и если дополнять шоп, то пользователь при получении (нужен доп функционал) будет обновлять его.
-# какой функционал тут не прописан? какие вопросы можно задать, чтобы выяснить, какого функционала не хватает для обновления статуса заказа ПОЛЬЗОВАТЕЛЕМ?
-# верно ли я понимаю, что пайплайн не включает в себя обновление статуса заказа пользователем?
-async def update_order_status(pool, order_id, new_status):
+async def update_rental_status(pool: asyncpg.pool.Pool, rental_id: str, new_status: str):
+    """
+    Обновить статус аренды.
+    """
     async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE rentals SET status = $1 WHERE rental_id = $2
+            """, new_status, rental_id
+        )
+
+## но добавился ride_comment. на странице поездки
+## можно попробовать вставить в процедуру аренды, если тригер не сработает. но кажется, уже дописано. главное как-то запромптить это сделать.
+## но уже есть инструкция от гпт, ты забыл!
+
+
+def haversine(lat1, lon1, lat2, lon2):
+    """
+    Рассчитывает расстояние между двумя точками на Земле в км.
+    """
+    R = 6371  # Радиус Земли в километрах
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = math.sin(d_lat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(d_lon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+
+async def continue_rental(pool, rental_id, new_location_id):
+    """
+    Продолжить аренду, предварительно проверяя возможность доехать с текущим зарядом.
+    """
+    async with pool.acquire() as conn:
+        # Получаем текущую информацию об аренде и самокате
+        rental = await conn.fetchrow("""
+            SELECT r.scooter_id, r.distance_km, s.battery_level, s.battery_consumption, s.speed_limit, l.latitude, l.longitude
+            FROM rentals r
+            JOIN scooters s ON r.scooter_id = s.scooter_id
+            JOIN locations l ON r.end_location_id = l.location_id
+            WHERE r.rental_id = $1
+        """, rental_id)
+
+        if not rental:
+            raise ValueError("Аренда не найдена.")
+
+        # Получаем данные новой локации
+        new_location = await conn.fetchrow("""
+            SELECT latitude, longitude
+            FROM locations
+            WHERE location_id = $1
+        """, new_location_id)
+
+        if not new_location:
+            raise ValueError("Локация не найдена.")
+
+        # Рассчитываем расстояние до новой локации
+        distance = haversine(
+            rental['latitude'], rental['longitude'],
+            new_location['latitude'], new_location['longitude']
+        )
+
+        # Проверяем, хватит ли заряда для поездки
+        battery_needed = distance * rental['battery_consumption']
+        if rental['battery_level'] < battery_needed:
+            raise ValueError("Недостаточно заряда для поездки в выбранную локацию.")
+
+        # Обновляем данные аренды: расстояние, заряд и локацию
+        new_distance = rental['distance_km'] + distance
+        new_battery_level = rental['battery_level'] - battery_needed
+
+        # Обновляем аренду
         await conn.execute("""
-            UPDATE orders SET status = $1 WHERE order_id = $2
-        """, new_status, order_id)
+            UPDATE rentals
+            SET distance_km = $1, remaining_battery = $2, end_location_id = $3
+            WHERE rental_id = $4
+        """, new_distance, new_battery_level, new_location_id, rental_id)
 
-######################################################################
-                            #Reviews - оставим так же?
-######################################################################
-
-"""
-
-0. Пойми, с чем взаимодействуют самокаты.
-1. Копируй в гпт.
-2. Получи это + измененное что-то на основе модели данных.
-
-3. Если rental history и review содержат отзыв, то как быть с rental_history? сюда включить? Логика ведь та же? сохранять текст? 
-
-4. Кажется, order-history нигде и не используется в БД. так же поступить?))))
-
-
-9. А будет ли такая же аналитика по истории или это уже избыток? кажется, даже аналитика особо не нужна. для МВП хватит получить все отзывы.
-.... но в перспективе допускается реализация дашбордов, аналитики. зимой.
-
-
-"""
-
-# Отзыв можно: добавить на странице продукта, получить его на странице продукта (обновив страничку), и получить средний рейтинг.
-# По сути отзыв - это оставление коммента.
-# Отзыв к поездке или к аренде - это уже усложнение и доп сущности, судя по всему.
-# Отзывы напрямую зависят от пайплайна заказа. 
-# Здесь же не требуется оформлять заказ для оставления отзыва. Отзыв привязан только к товару.
-# Отзыв, оплата - это окончание пайплайна классической аренды. Либо пайплайн будет иным.
-# Если в моем пайплайне аренды нет привязки, я могу оставить в любое время. Тогда еще чего нет?
-# Тогда нет и завершения, получения.
-# Его же действительно нет, поскольку пользователь не может обновить статус заказа.
-# Оставление отзывов завязано на возможности пользователем обновить статус заказа. Но явно это не прописано в виде сущностей. 
-# Это ведь просто функционал. А функционал не привязан к таким сущностям, это скорее метауровень, архитектура, модель. так?
-# Что я буду с этим делать?
-# 1. Подведу итоги всему пайплайну магазина на основе таблицы того, что может пользователь и админ. Это помещу в ридми.
-# 2. Подведу итоги, как мог выглядеть реальный пайплайн магазина (это для питон проекта пригодится). Усложнения будут направлены в сторону цены, функционала пользователя.
-# 3. Сравню минимальный пайплайн магазина с минимумом аренды.
-# 4. Составлю реальную аренду, сравню с реальным магазином.
-# Или поменяю местами шаги 3-4.
-
-
-# Для логики страницы продукта
-async def add_review(pool: asyncpg.pool.Pool, product_id: str, user_id: str, rating: int, comment: str):
-    """
-    Добавить отзыв к товару.
-    """
-    async with pool.acquire() as conn:
+        # Обновляем заряд самоката
         await conn.execute("""
-            INSERT INTO reviews (product_id, user_id, rating, comment)
-            VALUES ($1, $2, $3, $4)
-        """, product_id, user_id, rating, comment)
+            UPDATE scooters
+            SET battery_level = $1, location_id = $2
+            WHERE scooter_id = $3
+        """, new_battery_level, new_location_id, rental['scooter_id'])
 
-# для логики страницы продукта 
-async def get_reviews_by_product_id(pool: asyncpg.pool.Pool, product_id: str):
+        await flash(f"Поездка обновлена. Заряда осталось: {new_battery_level}%.", "success")
+
+async def complete_rental(pool, rental_id):
     """
-    Получить все отзывы для данного товара.
+    Завершает аренду и рассчитывает стоимость поездки.
     """
     async with pool.acquire() as conn:
-        return await conn.fetch("""
-            SELECT r.*, u.username
-            FROM reviews r
-            JOIN users u ON r.user_id = u.user_id
-            WHERE r.product_id = $1
-            ORDER BY r.review_date DESC
-        """, product_id)
+        rental = await conn.fetchrow("""
+            SELECT start_time, NOW() as current_time, price_per_minute, distance_km
+            FROM rentals
+            WHERE rental_id = $1 AND status = 'active'
+        """, rental_id)
 
-# для процедурки/функции в schema.sql
-async def get_average_rating(pool: asyncpg.pool.Pool, product_id: str):
-    async with pool.acquire() as conn:
-        return await conn.fetchval("""
-            SELECT get_average_product_rating($1)
-        """, product_id)
+        if not rental:
+            raise ValueError("Аренда не найдена или уже завершена.")
+
+        # Рассчитываем длительность
+        duration_minutes = (rental['current_time'] - rental['start_time']).total_seconds() / 60
+        total_price = round(duration_minutes * rental['price_per_minute'], 2)
+
+        # Завершаем аренду
+        await conn.execute("""
+            UPDATE rentals
+            SET status = 'completed', end_time = NOW(), total_price = $1
+            WHERE rental_id = $2
+        """, total_price, rental_id)
+
+        await flash(f"Аренда завершена. Итоговая стоимость: {total_price}₽.", "success")
+
+

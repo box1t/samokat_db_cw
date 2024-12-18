@@ -18,6 +18,16 @@
         }
         button {
             margin-top: 20px;
+            background: none; /* Убираем фон */
+            border: none; /* Убираем границу */
+            color: #007BFF; /* Цвет, как у ссылки */
+            text-decoration: underline; /* Подчеркивание */
+            font-size: 16px;
+            cursor: pointer; /* Курсор в виде указателя */
+        }
+        button:hover {
+            color: #0056b3; /* Цвет при наведении */
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -25,11 +35,9 @@
     <header>
         <h1>Восстановление базы данных</h1>
         <nav>
-            <a href="{{ url_for('admin.admin_dashboard') }}">Админка</a>
-            <a href="{{ url_for('admin.manage_products') }}">Управление товарами</a>
-            <a href="{{ url_for('admin.manage_categories') }}">Управление категориями</a>
-            <a href="{{ url_for('admin.manage_orders') }}">Управление заказами</a>
-            <a href="{{ url_for('main.logout') }}">Выход</a>
+            <a href="{{ url_for('main.home') }}">Главная</a>
+            <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
+            <a href="/logout">Выход</a>
         </nav>
     </header>
     <main>

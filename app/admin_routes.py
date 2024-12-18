@@ -25,77 +25,140 @@ async def admin_dashboard():
 ######################################################################
 
 
-@admin.route('/products', methods=['GET', 'POST'])
+@admin.route('/edit_scooters', methods=['GET', 'POST'])
 @admin_required
-async def manage_products():
+async def edit_scooters():
     """
-    Управление товарами: просмотр, добавление, редактирование, удаление.
+    Редактирование самокатов: просмотр, добавление, редактирование, удаление.
     """
     if request.method == 'POST':
         form = await request.form
         action = form.get('action')
+
         if action == 'add':
-            # Добавление нового товара
-            name = form.get('name')
-            description = form.get('description')
-            category_id = form.get('category_id') or None
-            price = float(form.get('price'))
-            stock = int(form.get('stock'))
-            manufacturer = form.get('manufacturer')
-            await add_product(current_app.db_pool, name, description, price, stock, manufacturer, category_id)
-            await flash('Товар добавлен.', 'success')
+            # Добавление нового самоката
+            model = form.get('model')
+            battery_level = int(form.get('battery_level'))
+            is_available = form.get('is_available') == 'true'
+            location_id = form.get('location_id') or None
+            battery_consumption = float(form.get('battery_consumption', 1.5))
+            speed_limit = float(form.get('speed_limit', 20.0))
+            last_maintenance_date = form.get('last_maintenance_date') or None
+
+            await add_scooter(
+                current_app.db_pool, model, battery_level, is_available,
+                location_id, battery_consumption, speed_limit, last_maintenance_date
+            )
+            await flash('Самокат добавлен.', 'success')
+
         elif action == 'edit':
-            # Редактирование существующего товара
-            product_id = form.get('product_id')
-            name = form.get('name')
-            description = form.get('description')
-            category_id = form.get('category_id') or None
-            price = float(form.get('price'))
-            stock = int(form.get('stock'))
-            manufacturer = form.get('manufacturer')
-            await update_product(current_app.db_pool, product_id, name, description, price, stock, manufacturer, category_id)
-            await flash('Товар обновлен.', 'success')
+            # Редактирование существующего самоката
+            scooter_id = form.get('scooter_id')
+            model = form.get('model')
+            battery_level = int(form.get('battery_level'))
+            is_available = form.get('is_available') == 'true'
+            location_id = form.get('location_id') or None
+            battery_consumption = float(form.get('battery_consumption', 1.5))
+            speed_limit = float(form.get('speed_limit', 20.0))
+            last_maintenance_date = form.get('last_maintenance_date') or None
+
+            await update_scooter(
+                current_app.db_pool, scooter_id, model, battery_level, is_available, 
+                location_id, last_maintenance_date, battery_consumption, speed_limit
+            )
+            await flash('Информация о самокате обновлена.', 'success')
+
         elif action == 'delete':
-            # Удаление товара
-            product_id = form.get('product_id')
-            await delete_product(current_app.db_pool, product_id)
-            await flash('Товар удален.', 'success')
-        return redirect(url_for('admin.manage_products'))
+            # Удаление самоката
+            scooter_id = form.get('scooter_id')
+            await delete_scooter(current_app.db_pool, scooter_id)
+            await flash('Самокат удален.', 'success')
 
-    # GET-запрос: отображаем список товаров и категорий
-    products = await get_all_products_with_categories(current_app.db_pool)
-    categories = await get_all_categories(current_app.db_pool)
-    return await render_template('admin/manage_products.html', products=products, categories=categories)
+        return redirect(url_for('admin.edit_scooters'))
 
+    # GET-запрос: отображаем список самокатов с информацией о локациях
+    scooters = await get_scooters_with_options(current_app.db_pool)
+    locations = await get_all_locations(current_app.db_pool)
 
-@admin.route('/categories', methods=['GET', 'POST'])
+    return await render_template(
+        'admin/edit_scooters.html',
+        scooters=scooters,
+        locations=locations
+    )
+
+@admin.route('/manage_locations', methods=['GET', 'POST'])
 @admin_required
-async def manage_categories():
+async def manage_locations():
     """
-    Управление категориями: просмотр, добавление, редактирование, удаление.
+    Управление локациями: просмотр, добавление, редактирование, удаление.
     """
     if request.method == 'POST':
         form = await request.form
         action = form.get('action')
+
         if action == 'add':
             name = form.get('name')
-            await add_category(current_app.db_pool, name)
-            await flash('Категория добавлена.', 'success')
+            latitude = float(form.get('latitude'))
+            longitude = float(form.get('longitude'))
+            await add_location(current_app.db_pool, name, latitude, longitude)
+            await flash('Локация добавлена.', 'success')
+
         elif action == 'edit':
-            category_id = form.get('category_id')
+            location_id = form.get('location_id')
             name = form.get('name')
-            await update_category(current_app.db_pool, category_id, name)
-            await flash('Категория обновлена.', 'success')
+            latitude = float(form.get('latitude'))
+            longitude = float(form.get('longitude'))
+            await update_location(current_app.db_pool, location_id, name, latitude, longitude)
+            await flash('Локация обновлена.', 'success')
+
         elif action == 'delete':
-            category_id = form.get('category_id')
-            await delete_category(current_app.db_pool, category_id)
-            await flash('Категория удалена.', 'success')
-        return redirect(url_for('admin.manage_categories'))
+            location_id = form.get('location_id')
+            await delete_location(current_app.db_pool, location_id)
+            await flash('Локация удалена.', 'success')
 
-    categories = await get_all_categories(current_app.db_pool)
-    return await render_template('admin/manage_categories.html', categories=categories)
+        return redirect(url_for('admin.manage_locations'))
 
+    # Получаем все локации для отображения
+    locations = await get_all_locations(current_app.db_pool)
+    return await render_template('admin/manage_locations.html', locations=locations)
 
+@admin.route('/manage_scooters', methods=['GET', 'POST'])
+@admin_required
+async def manage_scooters():
+    """
+    Управление самокатами: просмотр, обслуживание и изменение доступности.
+    """
+    if request.method == 'POST':
+        form = await request.form
+        action = form.get('action')
+
+        if action == 'service':
+            # Обслужить все самокаты в выбранной локации
+            location_id = form.get('location_id')
+            await service_scooters_in_location(current_app.db_pool, location_id)
+            await flash('Самокаты в локации обслужены и стали недоступными.', 'success')
+        
+        elif action == 'update_availability':
+            # Обновить доступность конкретного самоката
+            scooter_id = form.get('scooter_id')
+            is_available = form.get('is_available') == 'true'
+            await update_scooter_availability(current_app.db_pool, scooter_id, is_available)
+            await flash(f'Доступность самоката обновлена: {"доступен" if is_available else "недоступен"}.', 'success')
+
+        return redirect(url_for('admin.manage_scooters'))
+
+    # Получение всех самокатов с сортировкой по заряду и локации
+    scooters = await get_all_scooters_sorted(current_app.db_pool)
+    locations = await get_all_locations(current_app.db_pool)
+
+    return await render_template(
+        'admin/manage_scooters.html',
+        scooters=scooters,
+        locations=locations
+    )
+
+# вместо order - rental status
+# но чего-то не хватает!
 @admin.route('/orders', methods=['GET', 'POST'])
 @admin_required
 async def manage_orders():
@@ -106,6 +169,7 @@ async def manage_orders():
         form = await request.form
         order_id = form.get('order_id')
         new_status = form.get('status')
+
         await update_order_status(current_app.db_pool, order_id, new_status)
         await flash('Статус заказа обновлен.', 'success')
         return redirect(url_for('admin.manage_orders'))
@@ -128,23 +192,30 @@ async def backup_database():
     """
     Резервное копирование базы данных.
     """
+    import subprocess
+
     # Путь к резервной копии
     backup_dir = 'backups'
     os.makedirs(backup_dir, exist_ok=True)
     backup_file = os.path.join(backup_dir, f'backup_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}.sql')
 
     # Команда для резервного копирования
-    db_name = os.getenv("DB_NAME") 
-    db_user = os.getenv("DB_USER")       
-    db_password = os.getenv("DB_PASSWORD")  
+    db_name = os.getenv("DB_NAME")
+    db_user = os.getenv("DB_USER")
+    db_password = os.getenv("DB_PASSWORD")
 
-    command = f'PGPASSWORD="{db_password}" pg_dump -U {db_user} {db_name} > {backup_file}'
+    if not all([db_name, db_user, db_password]):
+        await flash('Переменные окружения для базы данных не настроены.', 'danger')
+        return redirect(url_for('admin.admin_dashboard'))
 
-    # Выполнение команды
-    result = os.system(command)
-    if result == 0:
+    command = f'PGPASSWORD="{db_password}" pg_dump -h localhost -U {db_user} {db_name} > {backup_file}'
+
+    try:
+        result = subprocess.run(command, shell=True, check=True, stderr=subprocess.PIPE)
+        logger.info(f'Резервная копия создана: {backup_file}')
         await flash(f'Резервная копия создана: {backup_file}', 'success')
-    else:
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Ошибка при создании резервной копии: {e.stderr.decode()}")
         await flash('Ошибка при создании резервной копии.', 'danger')
 
     return redirect(url_for('admin.admin_dashboard'))
@@ -198,13 +269,14 @@ async def restore_database():
             result = subprocess.run(command, env=env, capture_output=True, text=True)
 
             if result.returncode == 0:
+                logger.info(f'База данных успешно восстановлена из резервной копии.')
                 await flash('База данных успешно восстановлена из резервной копии.', 'success')
             else:
                 logger.error(f"Ошибка при восстановлении базы данных: {result.stderr}")
                 await flash('Ошибка при восстановлении базы данных.', 'danger')
         except Exception as e:
             logger.error(f"Исключение при восстановлении базы данных: {e}")
-            await flash('Ошибка при восстановлении базы данных.', 'danger')
+            await flash('Исключение  при восстановлении базы данных.', 'danger')
 
         return redirect(url_for('admin.admin_dashboard'))
 

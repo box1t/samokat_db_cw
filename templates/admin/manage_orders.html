@@ -1,15 +1,77 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <title>Управление заказами</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        /* Стили для таблицы */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+
+        /* Стили для формы в ячейке */
+        form {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Увеличенный размер селектора */
+        select {
+            padding: 8px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        /* Класс для кнопки обновления статуса */
+        .btn-update {
+            background-color: #28a745; /* Зелёный цвет */
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            text-align: center;
+        }
+        .btn-update:hover {
+            background-color: #218838; /* Тёмно-зелёный при наведении */
+        }
+        .select-update {
+            padding: 8px;
+            font-size: 14px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: box-shadow 0.3s ease; /* Плавное появление тени */
+        }
+
+        /* Эффект затенения при наведении */
+        .select-update:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Тень при наведении */
+            border-color: #aaa; /* Немного более тёмный бордер */
+        }
+    </style>
 </head>
 <body>
     <header>
         <h1>Управление заказами</h1>
         <nav>
-            <a href="{{ url_for('admin.admin_dashboard') }}">Админка</a>
+            <a href="{{ url_for('main.home') }}">Главная</a>
+            <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
             <a href="/logout">Выход</a>
         </nav>
     </header>
@@ -18,7 +80,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>Номер заказа</th>
+                    <th>UUID заказа</th>
                     <th>Пользователь</th>
                     <th>Дата заказа</th>
                     <th>Общая стоимость</th>
@@ -31,20 +93,20 @@
                 <tr>
                     <td>{{ order.order_id }}</td>
                     <td>{{ order.username }}</td>
-                    <td>{{ order.order_date }}</td>
+                    <td>{{ order.order_date.strftime('%Y-%m-%d %H:%M') }}</td> <!-- Форматирование даты -->
                     <td>{{ order.total_cost }} ₽</td>
                     <td>{{ order.status }}</td>
                     <td>
                         <form method="POST" action="{{ url_for('admin.manage_orders') }}">
                             <input type="hidden" name="order_id" value="{{ order.order_id }}">
-                            <select name="status">
+                            <select name="status" class="select-update">
                                 <option value="Pending" {% if order.status == 'Pending' %}selected{% endif %}>Pending</option>
                                 <option value="Processing" {% if order.status == 'Processing' %}selected{% endif %}>Processing</option>
                                 <option value="Shipped" {% if order.status == 'Shipped' %}selected{% endif %}>Shipped</option>
                                 <option value="Delivered" {% if order.status == 'Delivered' %}selected{% endif %}>Delivered</option>
                                 <option value="Cancelled" {% if order.status == 'Cancelled' %}selected{% endif %}>Cancelled</option>
                             </select>
-                            <button type="submit">Обновить статус</button>
+                            <button type="submit" class="btn-update">Обновить статус</button>
                         </form>
                     </td>
                 </tr>

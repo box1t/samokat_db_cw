@@ -9,25 +9,75 @@
             width: 100%;
             border-collapse: collapse;
             margin-bottom: 20px;
-            table-layout: fixed;
+            table-layout: fixed; /* Фиксированная ширина таблицы */
         }
         th, td {
             border: 1px solid #ddd;
             padding: 8px;
-            word-wrap: break-word;
+            word-wrap: break-word; /* Обрывать слова при переполнении */
+            height: 40px; /* Устанавливаем минимальную высоту */
+            vertical-align: middle; /* Центрирование по вертикали */
         }
         th {
             background-color: #f2f2f2;
+            text-align: left;
         }
         form {
             display: inline;
         }
-        .action-buttons button {
-            margin-right: 5px;
+        /* Зеленые кнопки */
+        .action-buttons button,
+        button[type="submit"] {
+            background-color: #28a745; /* Зеленый цвет */
+            color: white; /* Белый текст */
+            border: none;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
         }
+        .action-buttons button:hover,
+        button[type="submit"]:hover {
+            background-color: #218838; /* Темно-зеленый цвет */
+        }
+        .action-buttons button[name="action"][value="delete"] {
+            background-color: #dc3545; /* Красная кнопка */
+        }
+        .action-buttons button[name="action"][value="delete"]:hover {
+            background-color: #c82333;
+        }
+        input[type="text"], input[type="number"], textarea, select {
+            width: 100%; /* Заполняет всю ячейку */
+            box-sizing: border-box; /* Учитывает padding и границы */
+            padding: 4px; /* Добавляем немного отступа */
+        }
+
+        input[name="price"] {
+            width: 100%; /* Устанавливает ширину поля для цены больше стандартной */
+            box-sizing: border-box;
+        }
+        table tbody input.number-input {
+            padding: 0.4rem !important; /* Новый padding с приоритетом */
+            width: 110px; /* Ширина */
+            font-size: 1rem;
+            text-align: center;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-sizing: border-box; /* Учитываем padding */
+        }
+        
+        /* Специфическая ширина для колонок */
+        td:nth-child(1), th:nth-child(1) { width: 15%; } /* Название */
+        td:nth-child(2), th:nth-child(2) { width: 20%; } /* Описание */
+        td:nth-child(3), th:nth-child(3) { width: 15%; } /* Категория */
+        td:nth-child(4), th:nth-child(4) { width: 10%; } /* Цена */
+        td:nth-child(5), th:nth-child(5) { width: 10%; } /* Количество */
+        td:nth-child(6), th:nth-child(6) { width: 15%; } /* Производитель */
+        td:nth-child(7), th:nth-child(7) { width: 15%; } /* Действия */
+
         textarea {
-            width: 100%;
             resize: vertical;
+            height: 50px; /* Высота текстового поля */
         }
     </style>
 </head>
@@ -35,11 +85,9 @@
     <header>
         <h1>Управление товарами</h1>
         <nav>
-            <a href="{{ url_for('admin.admin_dashboard') }}">Админка</a>
-            <a href="{{ url_for('admin.manage_categories') }}">Управление категориями</a>
-            <a href="{{ url_for('admin.manage_orders') }}">Управление заказами</a>
-            <a href="{{ url_for('admin.backup_database') }}">Резервное копирование</a>
-            <a href="{{ url_for('main.logout') }}">Выход</a>
+            <a href="{{ url_for('main.home') }}">Главная</a>
+            <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
+            <a href="/logout">Выход</a>
         </nav>
     </header>
     <main>
@@ -75,10 +123,10 @@
                             </select>
                         </td>
                         <td>
-                            <input type="number" name="price" value="{{ product.price }}" step="0.01" required>
+                            <input type="number" name="price" class="number-input" value="{{ product.price }}" step="0.01" required>
                         </td>
                         <td>
-                            <input type="number" name="stock" value="{{ product.stock }}" required>
+                            <input type="number" name="stock" class="number-input" value="{{ product.stock }}" required>
                         </td>
                         <td>
                             <input type="text" name="manufacturer" value="{{ product.manufacturer }}">

@@ -4,6 +4,34 @@
     <meta charset="UTF-8">
     <title>Профиль</title>
     <link rel="stylesheet" href="../static/styles.css">
+    <style>
+        /* Стили для точек и выравнивания списка */
+        .recent-orders ul {
+            list-style-type: disc; /* Восстанавливаем маркеры списка */
+            padding-left: 20px; /* Отступ для маркеров */
+        }
+    
+        .recent-orders li {
+            margin-bottom: 10px; /* Расстояние между элементами списка */
+        }
+    
+        .recent-orders p {
+            margin: 5px 0; /* Выравнивание отступов параграфов */
+        }
+        button {
+            margin-top: 20px;
+            background: none; /* Убираем фон */
+            border: none; /* Убираем границу */
+            color: #007BFF; /* Цвет, как у ссылки */
+            text-decoration: underline; /* Подчеркивание */
+            font-size: 16px;
+            cursor: pointer; /* Курсор в виде указателя */
+        }
+        button:hover {
+            color: #0056b3; /* Цвет при наведении */
+            text-decoration: underline;
+        }
+    </style>
 </head>
 <body>
     <header>
@@ -11,14 +39,14 @@
         <nav>
             <a href="/">Главная</a>
             <a href="/cart">Корзина</a>
-            <a href="/home">Профиль</a>
+            <a href="/profile">Профиль</a>
             <a href="/logout">Выход</a>
         </nav>
     </header>
     <main>
-        <h2>Добро пожаловать, {{ username }}!</h2>
         <div class="profile-info">
             <p><strong>Email:</strong> {{ email }}</p>
+            <p><strong>Username:</strong> {{ username }}</p><br>
         </div>
         <section class="recent-orders">
             <h3>Последние заказы</h3>
@@ -26,7 +54,10 @@
                 <ul>
                     {% for order in last_orders %}
                         <li>
-                            <p><strong>Дата заказа:</strong> {{ order.order_date }}</p>
+                            <p>
+                                <strong>Дата заказа:</strong> 
+                                {{ order.order_date.strftime('%Y-%m-%d %H:%M') }} <!-- Форматирование даты -->
+                            </p>
                             <p><strong>Стоимость:</strong> {{ order.total_cost }} ₽</p>
                             <p><strong>Товары:</strong></p>
                             <ul>

@@ -231,8 +231,8 @@ form button:hover {
 }
 
 table tbody input[type="number"] {
-    width: 40px; /* Установите нужную ширину */
-    padding: 0.5rem; /* Внутренние отступы */
+    width: 80px; /* Установите нужную ширину */
+    padding: 0.4rem; /* Внутренние отступы */
     font-size: 1rem; /* Размер шрифта */
     text-align: center; /* Центрирование текста */
     border: 1px solid #ccc; /* Цвет границы */
