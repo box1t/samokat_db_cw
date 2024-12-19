@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Детали поездки</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Детали поездки</h1>
+            <nav>
+                <a href="{{ url_for('main.home') }}">Главная</a>
+                {% if session.get('user_id') %}
+                    <a href="{{ url_for('main.scooter_page', scooter_id=scooter.scooter_id) }}">Страница самоката</a>
+                    <a href="/profile">Профиль</a>
+                    {% if 'Admin' in g.user_roles %}
+                        <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
+                    {% endif %}
+                    <a href="{{ url_for('main.logout') }}">Выход</a>
+                {% else %}
+                    <a href="{{ url_for('main.login') }}">Вход</a>
+                    <a href="{{ url_for('main.register') }}">Регистрация</a>
+                {% endif %}
+            </nav>
+    </header>
+    <main>
+        <!-- Flash сообщения для деталей поездки -->
+        <section>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div id="trip-messages">
+                    {% for category, message in messages %}
+                        <p class="flash-message {{ category }}">{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            {% endwith %}
+        </section>
+
+        <!-- Информация о текущей поездке -->
+        <section>
+            <h2>Информация о поездке</h2>
+            {% if rental %}
+                <p><strong>ID аренды:</strong> {{ rental.rental_id }}</p>
+                <p><strong>Самокат:</strong> {{ scooter.model }}</p>
+                <p><strong>Текущая локация:</strong> {{ rental.end_location_id or 'Не выбрана' }}</p>
+                <p><strong>Статус поездки:</strong> {{ rental.status }}</p>
+            {% else %}
+                <p>Информация о текущей аренде недоступна.</p>
+            {% endif %}
+        </section>
+
+        <!-- Форма выбора локации -->
+        <section>
+            <h2>Выберите пункт назначения</h2>
+            {% if destinations|length > 0 %}
+                <form method="POST" action="{{ url_for('main.confirm_rental', scooter_id=scooter.scooter_id) }}">
+                    <div class="destination-list">
+                        {% for destination in destinations %}
+                        <label>
+                            <input type="radio" name="end_location_id" value="{{ destination.location_id }}" required>
+                            {{ destination.location_name }}
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <button type="submit">Подтвердить</button>
+                </form>
+            {% else %}
+                <p>Нет доступных пунктов назначения.</p>
+            {% endif %}
+        </section>
+
+        <!-- Кнопки для продолжения или завершения аренды -->
+        <section>
+            <h2>Управление поездкой</h2>
+            {% if rental %}
+                <form method="POST" action="{{ url_for('main.continue_rental') }}">
+                    <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                    <input type="hidden" name="end_location_id" value="{{ rental.end_location_id }}">
+                    <button type="submit">Продолжить поездку</button>
+                </form>
+                <form method="POST" action="{{ url_for('main.complete_rental_route') }}">
+                    <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                    <input type="hidden" name="end_location_id" value="{{ rental.end_location_id }}">
+                    <label for="comment">Комментарий:</label>
+                    <textarea id="comment" name="comment"></textarea>
+                    <button type="submit">Завершить поездку</button>
+                </form>
+            {% else %}
+                <p>Продолжение и завершение поездки недоступны.</p>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

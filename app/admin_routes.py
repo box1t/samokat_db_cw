@@ -1,7 +1,7 @@
 from quart import Blueprint, render_template, request, redirect, url_for, flash, current_app, session, g
 from app.db import *
 import os
-import datetime
+
 from app.utils import *
 from dotenv import load_dotenv
 import glob
@@ -39,14 +39,21 @@ async def edit_scooters():
             # Добавление нового самоката
             model = form.get('model')
             battery_level = int(form.get('battery_level'))
-            is_available = form.get('is_available') == 'true'
+            status = form.get('status', 'available')  # Используем строковый статус вместо is_available
             location_id = form.get('location_id') or None
             battery_consumption = float(form.get('battery_consumption', 1.5))
             speed_limit = float(form.get('speed_limit', 20.0))
             last_maintenance_date = form.get('last_maintenance_date') or None
 
+            if await is_duplicate_scooter_characteristics(
+                current_app.db_pool, model, speed_limit, battery_consumption
+            ):
+                await flash('У этой модели уже существуют такие характеристики скорости и расхода электричества.', 'error')
+                return redirect(url_for('admin.edit_scooters'))
+
+
             await add_scooter(
-                current_app.db_pool, model, battery_level, is_available,
+                current_app.db_pool, model, battery_level, status,
                 location_id, battery_consumption, speed_limit, last_maintenance_date
             )
             await flash('Самокат добавлен.', 'success')
@@ -56,14 +63,21 @@ async def edit_scooters():
             scooter_id = form.get('scooter_id')
             model = form.get('model')
             battery_level = int(form.get('battery_level'))
-            is_available = form.get('is_available') == 'true'
+            status = form.get('status', 'available')
             location_id = form.get('location_id') or None
             battery_consumption = float(form.get('battery_consumption', 1.5))
             speed_limit = float(form.get('speed_limit', 20.0))
             last_maintenance_date = form.get('last_maintenance_date') or None
 
+            if await is_duplicate_scooter_characteristics(
+                current_app.db_pool, model, speed_limit, battery_consumption, scooter_id
+            ):
+                await flash('У этой модели уже существуют такие характеристики скорости и расхода электричества.', 'error')
+                return redirect(url_for('admin.edit_scooters'))
+
+
             await update_scooter(
-                current_app.db_pool, scooter_id, model, battery_level, is_available, 
+                current_app.db_pool, scooter_id, model, battery_level, status,
                 location_id, last_maintenance_date, battery_consumption, speed_limit
             )
             await flash('Информация о самокате обновлена.', 'success')
@@ -77,7 +91,7 @@ async def edit_scooters():
         return redirect(url_for('admin.edit_scooters'))
 
     # GET-запрос: отображаем список самокатов с информацией о локациях
-    scooters = await get_scooters_with_options(current_app.db_pool)
+    scooters = await get_scooters_with_options(current_app.db_pool, include_location=True)
     locations = await get_all_locations(current_app.db_pool)
 
     return await render_template(
@@ -100,6 +114,9 @@ async def manage_locations():
             name = form.get('name')
             latitude = float(form.get('latitude'))
             longitude = float(form.get('longitude'))
+            if await is_duplicate_location(current_app.db_pool, name):
+                await flash('Локация с таким именем уже существует.', 'danger')
+                return redirect(url_for('admin.manage_locations'))
             await add_location(current_app.db_pool, name, latitude, longitude)
             await flash('Локация добавлена.', 'success')
 
@@ -108,6 +125,9 @@ async def manage_locations():
             name = form.get('name')
             latitude = float(form.get('latitude'))
             longitude = float(form.get('longitude'))
+            if await is_duplicate_location(current_app.db_pool, name, location_id):
+                await flash('Локация с таким именем уже существует.', 'danger')
+                return redirect(url_for('admin.manage_locations'))
             await update_location(current_app.db_pool, location_id, name, latitude, longitude)
             await flash('Локация обновлена.', 'success')
 
@@ -126,7 +146,7 @@ async def manage_locations():
 @admin_required
 async def manage_scooters():
     """
-    Управление самокатами: просмотр, обслуживание и изменение доступности.
+    Управление самокатами: просмотр, обслуживание и изменение статуса.
     """
     if request.method == 'POST':
         form = await request.form
@@ -136,14 +156,14 @@ async def manage_scooters():
             # Обслужить все самокаты в выбранной локации
             location_id = form.get('location_id')
             await service_scooters_in_location(current_app.db_pool, location_id)
-            await flash('Самокаты в локации обслужены и стали недоступными.', 'success')
+            await flash('Самокаты в локации обслужены и переведены в статус "maintenance".', 'success')
         
-        elif action == 'update_availability':
-            # Обновить доступность конкретного самоката
+        elif action == 'update_status':
+            # Обновить статус конкретного самоката
             scooter_id = form.get('scooter_id')
-            is_available = form.get('is_available') == 'true'
-            await update_scooter_availability(current_app.db_pool, scooter_id, is_available)
-            await flash(f'Доступность самоката обновлена: {"доступен" if is_available else "недоступен"}.', 'success')
+            status = form.get('status')  # Новый статус (например, 'available', 'in_use', 'on_maintenance', 'reserved')
+            await update_scooter_status(current_app.db_pool, scooter_id, status)
+            await flash(f'Статус самоката обновлен: {status}.', 'success')
 
         return redirect(url_for('admin.manage_scooters'))
 
@@ -157,26 +177,25 @@ async def manage_scooters():
         locations=locations
     )
 
-# вместо order - rental status
-# но чего-то не хватает!
-@admin.route('/orders', methods=['GET', 'POST'])
-@admin_required
-async def manage_orders():
-    """
-    Управление заказами: просмотр и изменение статуса.
-    """
-    if request.method == 'POST':
-        form = await request.form
-        order_id = form.get('order_id')
-        new_status = form.get('status')
+# # вместо order - rental status
+# @admin.route('/orders', methods=['GET', 'POST'])
+# @admin_required
+# async def manage_orders():
+#     """
+#     Управление заказами: просмотр и изменение статуса.
+#     """
+#     if request.method == 'POST':
+#         form = await request.form
+#         order_id = form.get('order_id')
+#         new_status = form.get('status')
 
-        await update_order_status(current_app.db_pool, order_id, new_status)
-        await flash('Статус заказа обновлен.', 'success')
-        return redirect(url_for('admin.manage_orders'))
+#         await update_order_status(current_app.db_pool, order_id, new_status)
+#         await flash('Статус заказа обновлен.', 'success')
+#         return redirect(url_for('admin.manage_orders'))
 
-    # GET-запрос: отображаем список заказов
-    orders = await get_all_orders(current_app.db_pool)
-    return await render_template('admin/manage_orders.html', orders=orders)
+#     # GET-запрос: отображаем список заказов
+#     orders = await get_all_orders(current_app.db_pool)
+#     return await render_template('admin/manage_orders.html', orders=orders)
 
 
 
@@ -195,7 +214,7 @@ async def backup_database():
     import subprocess
 
     # Путь к резервной копии
-    backup_dir = 'backups'
+    backup_dir = '/home/snowwy/Desktop/MAI/samokat_db_cw/samokat_db_cw/backups'
     os.makedirs(backup_dir, exist_ok=True)
     backup_file = os.path.join(backup_dir, f'backup_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}.sql')
 

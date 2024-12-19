@@ -231,7 +231,7 @@ form button:hover {
 }
 
 table tbody input[type="number"] {
-    width: 80px; /* Установите нужную ширину */
+    width: 100px; /* Установите нужную ширину */
     padding: 0.4rem; /* Внутренние отступы */
     font-size: 1rem; /* Размер шрифта */
     text-align: center; /* Центрирование текста */
@@ -363,4 +363,121 @@ table tbody input[type="number"] {
 
 .auth-form .secondary-link:hover {
     color: #0078FF;
+}
+
+/* Карточка самоката */
+.product-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    justify-content: center;
+}
+
+.product-item {
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    width: 300px;
+}
+
+.product-item h3 {
+    color: #0078d7;
+    font-size: 1.5em;
+}
+
+.product-item p {
+    margin: 10px 0;
+    color: #555;
+}
+
+.add-to-cart-button, .details-button {
+    display: inline-block;
+    padding: 10px 15px;
+    color: white;
+    background-color: #ff3366;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 1em;
+    margin-top: 10px;
+}
+
+.add-to-cart-button:hover, .details-button:hover {
+    background-color: #e62e5c;
+}
+
+.battery-label {
+    font-weight: bold;
+    margin-right: 10px;
+    color: #555;
+}
+
+.search-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.search-input, .search-select, .search-button {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 1em;
+}
+
+
+
+
+
+.destination-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+}
+
+.destination-card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    width: calc(20% - 15px);
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: start;
+}
+
+.destination-card input[type="radio"] {
+    margin-right: 10px;
+}
+
+.destination-details {
+    margin-left: 25px;
+}
+
+.destination-card:hover {
+    background-color: #f1f1f1;
+    border-color: #ccc;
+}
+
+.confirm-button {
+    margin-top: 20px;
+    background-color: #ff007f;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.confirm-button:hover {
+    background-color: #e60073;
 }

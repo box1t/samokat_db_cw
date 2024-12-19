@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ scooters.model }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>{{ scooters.model }}</h1>
+        <nav>
+            <a href="{{ url_for('main.home') }}">Главная</a>
+            {% if session.get('user_id') %}
+                <a href="/profile">Профиль</a>
+                {% if 'Admin' in g.user_roles %}
+                    <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
+                {% endif %}
+                <a href="{{ url_for('main.logout') }}">Выход</a>
+            {% else %}
+                <a href="{{ url_for('main.login') }}">Вход</a>
+                <a href="{{ url_for('main.register') }}">Регистрация</a>
+            {% endif %}
+        </nav>
+    </header>
+    <main>
+        <p><strong>Локация:</strong> {{ scooters.location_name or 'N/A' }}</p>
+        <p><strong>Статус:</strong> {{ scooters.status }}</p>
+        <p><strong>Текущий заряд:</strong> {{ scooters.battery_level }}%</p>
+        <p><strong>Энергопотребление:</strong> {{ scooters.battery_consumption }}% /км</p>
+        <p><strong>Ограничение скорости:</strong> {{ scooters.speed_limit }} км/ч</p>
+        <p><strong>Дата последнего обслуживания:</strong> {{ scooters.last_maintenance_date.strftime('%Y-%m-%d %H:%M') if scooters.last_maintenance_date else 'N/A' }}</p>
+
+        <!-- Кнопка действия в зависимости от статуса -->
+        {% if scooters.status == 'available' %}
+            <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
+                <input type="hidden" name="scooter_id" value="{{ scooters.scooter_id }}">
+                <button type="submit" class="action-button">Забронировать</button>
+            </form>
+        {% elif scooters.status == 'reserved' and session.get('user_id') and scooters.user_reserved %}
+            <form method="GET" action="{{ url_for('main.select_destination', scooter_id=scooters.scooter_id) }}">
+                <button type="submit" class="action-button">Поехали</button>
+            </form>
+        {% else %}
+            <p>Этот самокат недоступен для бронирования или использования в данный момент.</p>
+        {% endif %}
+
+        <h3>Отзывы</h3>
+        {% if reviews %}
+            <ul>
+                {% for review in reviews %}
+                    <li>
+                        <p><strong>{{ review.username }}</strong> ({{ review.review_date.strftime('%Y-%m-%d %H:%M') or 'N/A' }})</p>
+                        <p>Оценка: {{ review.rating }} / 5</p>
+                        <p>{{ review.review_text }}</p>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Пока нет отзывов на этот самокат.</p>
+        {% endif %}
+
+        {% if session.get('user_id') %}
+            <h3>Оставить отзыв</h3>
+            <form method="POST">
+                <input type="hidden" name="rental_id" value="{{ last_rental.id }}">
+                <p>
+                    <label for="rating">Оценка:</label>
+                    <select name="rating" id="rating">
+                        <option value="5">5</option>
+                        <option value="4">4</option>
+                        <option value="3">3</option>
+                        <option value="2">2</option>
+                        <option value="1">1</option>
+                    </select>
+                </p>
+                <p>
+                    <label for="review_text">Комментарий:</label><br>
+                    <textarea name="review_text" id="review_text" rows="5" cols="50" required></textarea>
+                </p>
+                <button type="submit">Отправить отзыв</button>
+            </form>
+        {% else %}
+            <p><a href="{{ url_for('main.login') }}">Войдите в систему</a>, чтобы оставить отзыв.</p>
+        {% endif %}
+    </main>
+</body>
+</html>

@@ -6,16 +6,16 @@
     <link rel="stylesheet" href="../static/styles.css">
     <style>
         /* Стили для точек и выравнивания списка */
-        .recent-orders ul {
+        .recent-rentals ul {
             list-style-type: disc; /* Восстанавливаем маркеры списка */
             padding-left: 20px; /* Отступ для маркеров */
         }
     
-        .recent-orders li {
+        .recent-rentals li {
             margin-bottom: 10px; /* Расстояние между элементами списка */
         }
     
-        .recent-orders p {
+        .recent-rentals p {
             margin: 5px 0; /* Выравнивание отступов параграфов */
         }
         button {
@@ -37,10 +37,17 @@
     <header>
         <h1>Ваш профиль</h1>
         <nav>
-            <a href="/">Главная</a>
-            <a href="/cart">Корзина</a>
-            <a href="/profile">Профиль</a>
-            <a href="/logout">Выход</a>
+            <a href="{{ url_for('main.home') }}">Главная</a>
+            {% if session.get('user_id') %}
+                <a href="/profile">Профиль</a>
+                {% if 'Admin' in g.user_roles %}
+                    <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
+                {% endif %}
+                <a href="{{ url_for('main.logout') }}">Выход</a>
+            {% else %}
+                <a href="{{ url_for('main.login') }}">Вход</a>
+                <a href="{{ url_for('main.register') }}">Регистрация</a>
+            {% endif %}
         </nav>
     </header>
     <main>
@@ -48,32 +55,28 @@
             <p><strong>Email:</strong> {{ email }}</p>
             <p><strong>Username:</strong> {{ username }}</p><br>
         </div>
-        <section class="recent-orders">
-            <h3>Последние заказы</h3>
-            {% if last_orders %}
+        <section class="recent-rentals">
+            <h3>Последние поездки</h3>
+            {% if last_rentals %}
                 <ul>
-                    {% for order in last_orders %}
+                    {% for rental in last_rentals %}
                         <li>
                             <p>
-                                <strong>Дата заказа:</strong> 
-                                {{ order.order_date.strftime('%Y-%m-%d %H:%M') }} <!-- Форматирование даты -->
+                                <strong>Дата завершения поездки:</strong> 
+                                {{ rental.end_time.strftime('%Y-%m-%d %H:%M') or 'N/A' }} <!-- Форматирование даты -->
                             </p>
-                            <p><strong>Стоимость:</strong> {{ order.total_cost }} ₽</p>
-                            <p><strong>Товары:</strong></p>
+                            <p><strong>Стоимость:</strong> {{ rental.total_price }} ₽</p>
+                            <p><strong>Локации:</strong></p>
                             <ul>
                                 {% for product in order.products %}
                                     <li>{{ product }}</li>
                                 {% endfor %}
                             </ul>
-                            <form method="POST" action="/repeat_order">
-                                <input type="hidden" name="order_id" value="{{ order.order_id }}">
-                                <button type="submit">Повторить заказ</button>
-                            </form>
                         </li>
                     {% endfor %}
                 </ul>
             {% else %}
-                <p>У вас пока нет заказов.</p>
+                <p>У вас пока нет поездок.</p>
             {% endif %}
         </section>
     </main>

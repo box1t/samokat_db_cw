@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Редактирование самокатов</title>
+</head>
+<body>
+    <h1>Редактирование самокатов</h1>
+
+    <!-- Добавление нового самоката -->
+    <h2>Добавить самокат</h2>
+    <form method="POST">
+        <input type="hidden" name="action" value="add">
+        <label>Модель: <input type="text" name="model" required></label><br>
+        <label>Уровень заряда: <input type="number" name="battery_level" min="0" max="100" required></label><br>
+        <label>Статус: 
+            <select name="status">
+                <option value="available">Доступен</option>
+                <option value="in_use">В использовании</option>
+                <option value="maintenance">На обслуживании</option>
+            </select>
+        </label><br>
+        <label>Локация: 
+            <select name="location_id">
+                <option value="">Без локации</option>
+                {% for location in locations %}
+                    <option value="{{ location.location_id }}">{{ location.name }}</option>
+                {% endfor %}
+            </select>
+        </label><br>
+        <label>Расход заряда: <input type="number" step="0.1" name="battery_consumption" value="1.5"></label><br>
+        <label>Ограничение скорости: <input type="number" step="0.1" name="speed_limit" value="20.0"></label><br>
+        <label>Дата последнего обслуживания: <input type="date" name="last_maintenance_date"></label><br>
+        <button type="submit">Добавить</button>
+    </form>
+
+    <!-- Список самокатов -->
+    <h2>Список самокатов</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Модель</th>
+                <th>Заряд</th>
+                <th>Статус</th>
+                <th>Локация</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for scooter in scooters %}
+            <tr>
+                <td>{{ scooter.scooter_id }}</td>
+                <td>{{ scooter.model }}</td>
+                <td>{{ scooter.battery_level }}</td>
+                <td>{{ scooter.status }}</td>
+                <td>{{ scooter.location_name or 'Без локации' }}</td>
+                <td>
+                    <!-- Редактировать -->
+                    <form method="POST" style="display:inline;">
+                        <input type="hidden" name="action" value="edit">
+                        <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                        <button type="submit">Редактировать</button>
+                    </form>
+                    <!-- Удалить -->
+                    <form method="POST" style="display:inline;">
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                        <button type="submit" onclick="return confirm('Удалить этот самокат?');">Удалить</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

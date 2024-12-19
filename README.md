@@ -16,7 +16,7 @@ DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=mysecretpassword
-DB_NAME=postgres
+DB_NAME=scooters
 ```
 
 
@@ -27,8 +27,26 @@ DB_NAME=postgres
 - Если контейнер существует:
 ```sh
 docker start my_postgres
-psql -h localhost -p 5432 -U postgres
+psql -h localhost -p 5432 -U postgres -d scooters
+```
+
+- Если БД только создана, в psql необходимо заполнить её тестовыми данными:
+```sh
+CREATE DATABASE NEW;
+\c NEW
 \l
+```
+
+- Очистка всей бд:
+```sh
+DO $$ DECLARE
+    r RECORD;
+BEGIN
+    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+        EXECUTE 'DROP TABLE IF EXISTS ' || quote_ident(r.tablename) || ' CASCADE';
+    END LOOP;
+END $$;
+
 ```
 
 - Если ошибка "Address already in use"

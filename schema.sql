@@ -50,7 +50,7 @@ CREATE TABLE rentals (
     price_per_minute NUMERIC(10, 2) NOT NULL, -- Тариф аренды
     total_price NUMERIC(10, 2),
     distance_km NUMERIC(10, 2) DEFAULT 0.0,
-    remaining_battery INT;
+    remaining_battery INT,
     status VARCHAR(50) DEFAULT 'active', -- Состояние поездки
     CONSTRAINT fk_rentals_start_location FOREIGN KEY (start_location_id) REFERENCES locations(location_id),
     CONSTRAINT fk_rentals_end_location FOREIGN KEY (end_location_id) REFERENCES locations(location_id),
@@ -89,6 +89,9 @@ CREATE TABLE reviews (
     CONSTRAINT fk_reviews_users FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+-- Заполнение таблиц тестовыми данными
+INSERT INTO roles (name) VALUES ('User'), ('Admin');
+
 
 ---1. Представления
 ---2. Функции
@@ -107,7 +110,52 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION haversine(
+    lat1 NUMERIC, lon1 NUMERIC, lat2 NUMERIC, lon2 NUMERIC
+)
+RETURNS NUMERIC AS $$
+DECLARE
+    R CONSTANT NUMERIC := 6371; -- Радиус Земли в километрах
+    dlat NUMERIC;
+    dlon NUMERIC;
+    a NUMERIC;
+    c NUMERIC;
+BEGIN
+    dlat := radians(lat2 - lat1);
+    dlon := radians(lon2 - lon1);
 
+    a := sin(dlat / 2) ^ 2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon / 2) ^ 2;
+    c := 2 * atan2(sqrt(a), sqrt(1 - a));
+
+    RETURN R * c; -- Расстояние в километрах
+END;
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+
+
+CREATE OR REPLACE FUNCTION get_all_destinations_with_status(
+    scooter_id UUID
+)
+RETURNS TABLE (
+    location_id UUID,
+    location_name TEXT,
+    distance_km NUMERIC,
+    battery_needed NUMERIC,
+    is_accessible BOOLEAN
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        l.location_id,
+        l.name::TEXT AS location_name, -- Явное приведение к TEXT
+        haversine(sl.latitude, sl.longitude, l.latitude, l.longitude) AS distance_km,
+        haversine(sl.latitude, sl.longitude, l.latitude, l.longitude) * sc.battery_consumption AS battery_needed,
+        haversine(sl.latitude, sl.longitude, l.latitude, l.longitude) * sc.battery_consumption <= sc.battery_level AS is_accessible
+    FROM locations l
+    JOIN scooters sc ON sc.scooter_id = $1
+    JOIN locations sl ON sc.location_id = sl.location_id;
+END;
+$$ LANGUAGE plpgsql;
 
 
 
@@ -128,15 +176,14 @@ BEGIN
         NEW.total_price
     );
 
-    -- Вставка записи в rental_history
     INSERT INTO rental_history (
         history_id, rental_id, user_id, scooter_id, start_location_id,
-        end_location_id, start_time, end_time, total_price, status, change_date, summary, review
+        end_location_id, start_time, end_time, total_price, status, change_date, summary
     )
     VALUES (
         history_id, NEW.rental_id, NEW.user_id, NEW.scooter_id, NEW.start_location_id,
         NEW.end_location_id, NEW.start_time, NEW.end_time, NEW.total_price, 
-        NEW.status, NOW(), summary_text, NULL -- review остаётся NULL по умолчанию
+        NEW.status, NOW(), summary_text
     );
 
     RETURN NEW;
@@ -149,3 +196,93 @@ AFTER UPDATE OF status ON rentals
 FOR EACH ROW
 WHEN (NEW.status = 'completed')
 EXECUTE FUNCTION log_rental_history();
+
+
+CREATE OR REPLACE PROCEDURE process_rental_action(
+    OUT rental_id UUID,       -- Возвращает ID аренды
+    uid UUID,                 -- ID пользователя
+    scooter_id UUID,          -- ID самоката
+    action VARCHAR(50),       -- Действие: 'rent', 'continue'
+    end_location UUID = NULL  -- Конечная локация (для continue)
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    scooter RECORD;
+    rental RECORD;
+    distance_km NUMERIC;
+    battery_needed NUMERIC;
+BEGIN
+    -- Получаем информацию о самокате
+    SELECT * INTO scooter
+    FROM scooters s
+    WHERE s.scooter_id = process_rental_action.scooter_id FOR UPDATE;
+
+    IF scooter IS NULL THEN
+        RAISE EXCEPTION 'Самокат не найден.';
+    END IF;
+
+    -- Если действие - "rent"
+    IF action = 'rent' THEN
+        -- Проверяем, забронирован ли самокат текущим пользователем
+        SELECT * INTO rental
+        FROM rentals
+        WHERE user_id = uid AND scooter_id = scooter.scooter_id AND status = 'reserved';
+
+        IF rental IS NULL THEN
+            RAISE EXCEPTION 'Самокат не забронирован текущим пользователем.';
+        END IF;
+
+        -- Обновляем статус аренды и самоката
+        UPDATE rentals
+        SET status = 'active', start_time = NOW()
+        WHERE rental_id = rental.rental_id;
+
+        UPDATE scooters SET status = 'in_use' WHERE scooter_id = scooter.scooter_id;
+
+        rental_id := rental.rental_id;
+
+    -- Если действие - "continue"
+    ELSIF action = 'continue' THEN
+        -- Получаем активную аренду
+        SELECT * INTO rental
+        FROM rentals
+        WHERE user_id = uid AND scooter_id = scooter.scooter_id AND status = 'active';
+
+        IF rental IS NULL THEN
+            RAISE EXCEPTION 'Активная аренда не найдена.';
+        END IF;
+
+        -- Рассчитываем расстояние и проверяем заряд
+        SELECT haversine(l1.latitude, l1.longitude, l2.latitude, l2.longitude) INTO distance_km
+        FROM locations l1, locations l2
+        WHERE l1.location_id = rental.end_location_id AND l2.location_id = end_location;
+
+        battery_needed := distance_km * scooter.battery_consumption;
+        IF scooter.battery_level < battery_needed THEN
+            RAISE EXCEPTION 'Недостаточно заряда для поездки.';
+        END IF;
+
+        -- Обновляем аренду
+        UPDATE rentals
+        SET distance_km = distance_km + COALESCE(rental.distance_km, 0),
+            end_location_id = end_location,
+            remaining_battery = scooter.battery_level - battery_needed
+        WHERE rental_id = rental.rental_id;
+
+        -- Обновляем статус самоката
+        UPDATE scooters
+        SET battery_level = battery_level - battery_needed,
+            location_id = end_location
+        WHERE scooter_id = scooter.scooter_id;
+
+        rental_id := rental.rental_id;
+
+    ELSE
+        RAISE EXCEPTION 'Неизвестное действие: %', action;
+    END IF;
+END;
+$$;
+
+
+

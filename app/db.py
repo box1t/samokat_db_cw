@@ -2,7 +2,7 @@ import asyncpg
 import uuid
 import bcrypt
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import math
 
 logger = logging.getLogger(__name__)
@@ -100,51 +100,56 @@ async def search_scooters(
     pool: asyncpg.pool.Pool,
     query: str = '',
     location_id: str = '',
-    status: str = '',  # Новый параметр для статуса (например, 'available')
-    min_battery: int = 0
+    status: str = '',
+    min_battery: int = 0,
+    user_id: str = None,  # Добавим user_id для проверки резервирования
+    sort_by: str = 'model',
+    sort_order: str = 'ASC'
 ):
-    """
-    Поиск самокатов по модели, локации, статусу и уровню заряда.
-    """
     async with pool.acquire() as conn:
-        # Основной SQL-запрос
         sql = """
             SELECT 
                 s.scooter_id, 
                 s.model, 
                 s.battery_level, 
                 s.status, 
-                l.name AS location_name
+                s.last_maintenance_date, 
+                l.name AS location_name,
+                CASE 
+                    WHEN r.user_id = $1 THEN TRUE
+                    ELSE FALSE
+                END AS user_reserved
             FROM scooters s
             LEFT JOIN locations l ON s.location_id = l.location_id
+            LEFT JOIN rentals r ON r.scooter_id = s.scooter_id AND r.status = 'reserved'
         """
-        
+
         # Условия поиска
         conditions = []
-        params = []
+        params = [user_id]  # Первый параметр для проверки user_reserved
 
         if query:
-            conditions.append("s.model ILIKE $1")
+            conditions.append("s.model ILIKE $" + str(len(params) + 1))
             params.append(f"%{query}%")
         
         if location_id:
-            conditions.append(f"s.location_id = ${len(params) + 1}")
+            conditions.append("s.location_id = $" + str(len(params) + 1))
             params.append(location_id)
 
         if status:
-            conditions.append(f"s.status = ${len(params) + 1}")
+            conditions.append("s.status = $" + str(len(params) + 1))
             params.append(status)
         
         if min_battery > 0:
-            conditions.append(f"s.battery_level >= ${len(params) + 1}")
+            conditions.append("s.battery_level >= $" + str(len(params) + 1))
             params.append(min_battery)
         
         # Добавляем WHERE и условия
         if conditions:
             sql += " WHERE " + " AND ".join(conditions)
 
-        # Сортировка по модели
-        sql += " ORDER BY s.model"
+        # Сортировка
+        sql += f" ORDER BY {sort_by} {sort_order.upper()}"
 
         # Выполняем запрос
         return await conn.fetch(sql, *params)
@@ -176,25 +181,33 @@ async def get_scooter_by_id(pool: asyncpg.pool.Pool, scooter_id: str):
             LEFT JOIN locations l ON s.location_id = l.location_id
             WHERE s.scooter_id = $1
         """, scooter_id)
-
-
-# это делает админ в manage_scooters
-async def get_all_scooters(pool):
-    """
-    Получить список всех самокатов.
-    """
-    async with pool.acquire() as conn:
-        return await conn.fetch("""
-            SELECT *
-            FROM scooters
-            ORDER BY battery_level
-        """)
     
-###############################################################################################################
-###############################################################################################################
-###############################################################################################################
+async def get_scooter_by_id_second(pool: asyncpg.pool.Pool, scooter_id: str, user_id: str = None):
+    async with pool.acquire() as conn:
+        sql = """
+            SELECT 
+                s.scooter_id, 
+                s.model, 
+                s.battery_level, 
+                s.status, 
+                s.last_maintenance_date, 
+                l.name AS location_name,
+                CASE 
+                    WHEN r.user_id = $2 THEN TRUE
+                    ELSE FALSE
+                END AS user_reserved
+            FROM scooters s
+            LEFT JOIN locations l ON s.location_id = l.location_id
+            LEFT JOIN rentals r ON r.scooter_id = s.scooter_id AND r.status = 'reserved'
+            WHERE s.scooter_id = $1
+        """
+        return await conn.fetchrow(sql, scooter_id, user_id)
 
-# возможно, это станет заменой    
+#################################################################
+                                #Admin_foos
+#################################################################
+
+# для админа
 async def get_scooters_with_options(pool, include_location: bool = True, order_by: str = 'model'):
     """
     Получить список самокатов с возможностью включения информации о локациях.
@@ -205,7 +218,7 @@ async def get_scooters_with_options(pool, include_location: bool = True, order_b
     """
     async with pool.acquire() as conn:
         base_query = """
-            SELECT s.scooter_id, s.model, s.battery_level, s.is_available, s.last_maintenance_date,
+            SELECT s.scooter_id, s.model, s.battery_level, s.status, s.last_maintenance_date,
                    s.battery_consumption, s.speed_limit
         """
 
@@ -227,96 +240,61 @@ async def get_scooters_with_options(pool, include_location: bool = True, order_b
 
         return await conn.fetch(base_query)
 
-
-
-## Пример с фильтрацией
-async def get_scooters_with_options(pool, include_location: bool = True, order_by: str = 'model', is_available: bool = None):
-    """
-    Получить список самокатов с фильтрацией по доступности.
-    """
-    async with pool.acquire() as conn:
-        sql = """
-            SELECT s.scooter_id, s.model, s.battery_level, s.is_available, s.status, s.last_maintenance_date,
-                   s.battery_consumption, s.speed_limit
-        """
-        if include_location:
-            sql += ", l.name AS location_name"
-
-        sql += " FROM scooters s"
-
-        if include_location:
-            sql += " LEFT JOIN locations l ON s.location_id = l.location_id"
-
-        if is_available is not None:
-            sql += " WHERE s.is_available = $1"
-
-        sql += f" ORDER BY s.{order_by}"
-
-        params = [is_available] if is_available is not None else []
-        return await conn.fetch(sql, *params)
-
-
-# для кого? админ и пользоватлеь?
+# для админа
 async def get_all_scooters_sorted(pool):
     """
     Получить все самокаты, отсортированные по заряду и локации.
     """
     async with pool.acquire() as conn:
         return await conn.fetch("""
-            SELECT s.scooter_id, s.model, s.battery_level, s.is_available, s.last_maintenance_date, 
+            SELECT s.scooter_id, s.model, s.battery_level, s.status, s.last_maintenance_date, 
                    l.name AS location_name
             FROM scooters s
             LEFT JOIN locations l ON s.location_id = l.location_id
             ORDER BY s.battery_level ASC, l.name ASC
         """)
-###############################################################################################################
-###############################################################################################################
-###############################################################################################################
-
 
 # для админа
 async def service_scooters_in_location(pool, location_id):
     """
-    Обслужить все самокаты в заданной локации: обновить дату обслуживания и сделать их недоступными.
+    Обслужить все самокаты в заданной локации: обновить дату обслуживания и установить статус 'maintenance'.
     """
     async with pool.acquire() as conn:
         await conn.execute("""
             UPDATE scooters
-            SET is_available = FALSE, 
+            SET status = 'maintenance', 
                 last_maintenance_date = $1
             WHERE location_id = $2
-        """, datetime.utcnow(), location_id)
+        """, datetime.now(timezone.utc), location_id)
 
 # либо админ, либо юзер
-async def update_scooter_availability(pool, scooter_id, is_available: bool):
+async def update_scooter_status(pool, scooter_id, status: str):
     """
-    Обновить доступность самоката вручную.
+    Обновить статус самоката вручную.
     """
     async with pool.acquire() as conn:
         await conn.execute("""
             UPDATE scooters
-            SET is_available = $1
+            SET status = $1
             WHERE scooter_id = $2
-        """, is_available, scooter_id)
+        """, status, scooter_id)
 
 # Это делает админ в manage_scooters
-async def add_scooter(pool, model, battery_level, is_available=True, location_id=None,
+async def add_scooter(pool, model, battery_level, status='available', location_id=None,
                       battery_consumption=1.5, speed_limit=20.0, last_maintenance_date=None):
     """
     Добавить новый самокат в базу данных.
     """
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO scooters (scooter_id, model, battery_level, is_available, location_id, 
-                                 battery_consumption, speed_limit, last_maintenance_date)
+            INSERT INTO scooters (scooter_id, model, battery_level, status, location_id, 
+                                  battery_consumption, speed_limit, last_maintenance_date)
             VALUES (uuid_generate_v4(), $1, $2, $3, $4, $5, $6, $7)
-        """, model, battery_level, is_available, location_id, 
+        """, model, battery_level, status, location_id, 
         battery_consumption, speed_limit, last_maintenance_date)
 
-
-
 # Это делает админ в manage_scooters
-async def update_scooter(pool, scooter_id, model, battery_level, is_available, 
+async def update_scooter(pool, scooter_id, model, battery_level, status, 
                          location_id=None, last_maintenance_date=None, 
                          battery_consumption=1.5, speed_limit=20.0):
     """
@@ -327,17 +305,15 @@ async def update_scooter(pool, scooter_id, model, battery_level, is_available,
             UPDATE scooters
             SET model = $1, 
                 battery_level = $2, 
-                is_available = $3, 
+                status = $3, 
                 location_id = $4, 
                 last_maintenance_date = $5, 
                 battery_consumption = $6, 
                 speed_limit = $7
             WHERE scooter_id = $8
-        """, model, battery_level, is_available, 
+        """, model, battery_level, status, 
             location_id, last_maintenance_date, 
             battery_consumption, speed_limit, scooter_id)
-
-
 
 # Это делает админ в manage scooters
 async def delete_scooter(pool, scooter_id):
@@ -345,6 +321,50 @@ async def delete_scooter(pool, scooter_id):
         await conn.execute("""
             DELETE FROM scooters WHERE scooter_id = $1
         """, scooter_id)
+
+# ограничения для администратора
+async def is_duplicate_location(pool, name, location_id=None):
+    """
+    Проверяет, существует ли локация с указанным именем.
+    """
+    async with pool.acquire() as conn:
+        sql = """
+            SELECT location_id
+            FROM locations
+            WHERE name = $1
+        """
+        params = [name]
+        
+        # Исключаем текущую локацию при редактировании
+        if location_id:
+            sql += " AND location_id != $2"
+            params.append(location_id)
+        
+        result = await conn.fetchrow(sql, *params)
+        return result is not None
+
+# ограничения для администратора
+async def is_duplicate_scooter_characteristics(pool, model, speed_limit, battery_consumption, scooter_id=None):
+    """
+    Проверяет, существуют ли разные характеристики для одной модели.
+    """
+    async with pool.acquire() as conn:
+        sql = """
+            SELECT scooter_id
+            FROM scooters
+            WHERE model = $1 AND speed_limit = $2 AND battery_consumption = $3
+        """
+        params = [model, speed_limit, battery_consumption]
+        
+        # Исключаем текущий самокат при редактировании
+        if scooter_id:
+            sql += " AND scooter_id != $4"
+            params.append(scooter_id)
+        
+        result = await conn.fetchrow(sql, *params)
+        return result is not None
+
+
 
 ######################################################################
                             #Reviews_on_scooters (last step)
@@ -360,7 +380,6 @@ async def add_scooter_review(pool: asyncpg.pool.Pool, rental_id: str, scooter_id
             INSERT INTO reviews (rental_id, scooter_id, user_id, rating, review_text)
             VALUES ($1, $2, $3, $4, $5)
         """, rental_id, scooter_id, user_id, rating, review_text)
-
 
 # для логики страницы продукта 
 async def get_reviews_by_scooter_id(pool: asyncpg.pool.Pool, scooter_id: str):
@@ -385,7 +404,6 @@ async def get_average_rating_by_scooter(pool: asyncpg.pool.Pool, scooter_id: str
         return await conn.fetchval("""
             SELECT get_average_scooter_rating($1)
         """, scooter_id)
-
 
 ######################################################################
                             #Locations
@@ -437,131 +455,9 @@ async def delete_location(pool: asyncpg.pool.Pool, location_id: str):
             WHERE location_id = $1
         """, location_id)
 
-
 ######################################################################
-                            #Orders - rentals. (second step)
+                            # Rentals (Admin foos)
 ######################################################################
-
-
-# Для создания страницы профиля пользователя
-async def get_rental_count_by_scooter(pool: asyncpg.pool.Pool, scooter_id: str):
-    """
-    Возвращает количество аренд конкретного самоката.
-    """
-    sql = """
-        SELECT COUNT(*) AS rental_count
-        FROM rentals
-        WHERE scooter_id = $1;
-    """
-    async with pool.acquire() as conn:
-        result = await conn.fetchval(sql, scooter_id)
-        return result
-    
-# Для создания страницы профиля пользователя
-async def get_avg_rental_duration_by_scooter(pool: asyncpg.pool.Pool, scooter_id: str):
-    """
-    Возвращает среднюю продолжительность аренды самоката в минутах.
-    """
-    sql = """
-        SELECT AVG(EXTRACT(EPOCH FROM (end_time - start_time)) / 60) AS avg_duration
-        FROM rentals
-        WHERE scooter_id = $1 AND end_time IS NOT NULL;
-    """
-    async with pool.acquire() as conn:
-        result = await conn.fetchval(sql, scooter_id)
-        return result
-
-async def get_last_completed_rental(pool, user_id, scooter_id):
-    """
-    Возвращает последнюю завершенную аренду для указанного пользователя и самоката.
-    """
-    sql = """
-        SELECT rental_id
-        FROM rentals
-        WHERE user_id = $1 AND scooter_id = $2 AND status = 'completed'
-        ORDER BY end_time DESC
-        LIMIT 1;
-    """
-    async with pool.acquire() as conn:
-        return await conn.fetchval(sql, user_id, scooter_id)
-
-
-async def get_rental_by_id(pool, rental_id, user_id, scooter_id):
-    """
-    Проверяет, существует ли завершенная аренда для пользователя, самоката и rental_id.
-    """
-    sql = """
-        SELECT 1
-        FROM rentals
-        WHERE rental_id = $1 AND user_id = $2 AND scooter_id = $3 AND status = 'completed';
-    """
-    async with pool.acquire() as conn:
-        result = await conn.fetchval(sql, rental_id, user_id, scooter_id)
-        return result
-
-
-async def add_scooter_review(pool, rental_id, scooter_id, user_id, rating, review_text):
-    """
-    Добавляет отзыв в таблицу reviews.
-    """
-    sql = """
-        INSERT INTO reviews (rental_id, scooter_id, user_id, rating, review_text, review_date)
-        VALUES ($1, $2, $3, $4, $5, NOW());
-    """
-    async with pool.acquire() as conn:
-        await conn.execute(sql, rental_id, scooter_id, user_id, rating, review_text)
-
-async def get_completed_rentals_by_user_and_scooter(pool, user_id, scooter_id):
-    """
-    Возвращает список завершенных аренд пользователя для конкретного самоката.
-    """
-    sql = """
-        SELECT rental_id, start_time, end_time, distance_km
-        FROM rentals
-        WHERE user_id = $1 AND scooter_id = $2 AND status = 'completed';
-    """
-    async with pool.acquire() as conn:
-        return await conn.fetch(sql, user_id, scooter_id)
-
-
-#////////////////////////////////////////////////////////////
-
-# Для создания страницы профиля пользователя
-async def get_last_rentals(pool: asyncpg.pool.Pool, user_id: str) -> list:
-    """
-    Получить последние пять аренд пользователя.
-    """
-    async with pool.acquire() as conn:
-        return await conn.fetch(
-            """
-            SELECT r.rental_id, r.start_time, r.end_time, r.total_price, r.status,
-                   l1.location_name AS start_location, l2.location_name AS end_location
-            FROM rentals r
-            LEFT JOIN locations l1 ON r.start_location_id = l1.location_id
-            LEFT JOIN locations l2 ON r.end_location_id = l2.location_id
-            WHERE r.user_id = $1
-            ORDER BY r.start_time DESC
-            LIMIT 5
-            """, user_id
-        )
-
-# логика обработки аренды. не факт, что хорошая.
-
-##### Possible procedure
-
-#////////////////////////////////////////////////////////////
-#////////////////////////////////////////////////////////////
-async def process_rental(pool: asyncpg.pool.Pool, user_id: str, scooter_id: str, start_location_id: str):
-    """
-    Вызов хранимой процедуры для старта аренды самоката.
-    """
-    async with pool.acquire() as conn:
-        await conn.execute(
-            "CALL process_user_rental($1, $2, $3)",
-            user_id, scooter_id, start_location_id
-        )
-#////////////////////////////////////////////////////////////
-#////////////////////////////////////////////////////////////
 
 # для админа: логика управления всеми заказами
 async def get_all_rentals(pool: asyncpg.pool.Pool) -> list:
@@ -594,11 +490,148 @@ async def update_rental_status(pool: asyncpg.pool.Pool, rental_id: str, new_stat
             """, new_status, rental_id
         )
 
-## но добавился ride_comment. на странице поездки
-## можно попробовать вставить в процедуру аренды, если тригер не сработает. но кажется, уже дописано. главное как-то запромптить это сделать.
-## но уже есть инструкция от гпт, ты забыл!
+
+######################################################################
+                            # Rentals
+######################################################################
+
+# Для создания страницы профиля пользователя
+async def get_last_rentals(pool: asyncpg.pool.Pool, user_id: str) -> list:
+    """
+    Получить последние пять аренд пользователя.
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT r.rental_id, r.start_time, r.end_time, r.total_price, r.status,
+                   l1.name AS start_location, l2.name AS end_location
+            FROM rentals r
+            LEFT JOIN locations l1 ON r.start_location_id = l1.location_id
+            LEFT JOIN locations l2 ON r.end_location_id = l2.location_id
+            WHERE r.user_id = $1
+            ORDER BY r.start_time DESC
+            LIMIT 5
+            """, user_id
+        )
+
+# объединить для создания представления и дашборда
+async def get_rental_count_by_scooter(pool: asyncpg.pool.Pool, scooter_id: str):
+    """
+    Возвращает количество аренд конкретного самоката.
+    """
+    sql = """
+        SELECT COUNT(*) AS rental_count
+        FROM rentals
+        WHERE scooter_id = $1;
+    """
+    async with pool.acquire() as conn:
+        result = await conn.fetchval(sql, scooter_id)
+        return result
+
+# объединить для создания представления
+async def get_avg_rental_duration_by_scooter(pool: asyncpg.pool.Pool, scooter_id: str):
+    """
+    Возвращает среднюю продолжительность аренды самоката в минутах.
+    """
+    sql = """
+        SELECT AVG(EXTRACT(EPOCH FROM (end_time - start_time)) / 60) AS avg_duration
+        FROM rentals
+        WHERE scooter_id = $1 AND end_time IS NOT NULL;
+    """
+    async with pool.acquire() as conn:
+        result = await conn.fetchval(sql, scooter_id)
+        return result
+
+# объединить для создания представления
+async def get_last_completed_rental(pool, user_id, scooter_id):
+    """
+    Возвращает последнюю завершенную аренду для указанного пользователя и самоката.
+    """
+    sql = """
+        SELECT rental_id
+        FROM rentals
+        WHERE user_id = $1 AND scooter_id = $2 AND status = 'completed'
+        ORDER BY end_time DESC
+        LIMIT 1;
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetchval(sql, user_id, scooter_id)
+
+# Для создания страницы профиля пользователя
+async def add_scooter_review(pool, rental_id, scooter_id, user_id, rating, review_text):
+    """
+    Добавляет отзыв в таблицу reviews.
+    """
+    sql = """
+        INSERT INTO reviews (rental_id, scooter_id, user_id, rating, review_text, review_date)
+        VALUES ($1, $2, $3, $4, $5, NOW());
+    """
+    async with pool.acquire() as conn:
+        await conn.execute(sql, rental_id, scooter_id, user_id, rating, review_text)
+
+# пользовательское ограничение на другие аренды, пока есть незавершенная
+async def get_rental_by_id(pool, rental_id, user_id, scooter_id):
+    """
+    Проверяет, существует ли завершенная аренда для пользователя, самоката и rental_id.
+    """
+    sql = """
+        SELECT 1
+        FROM rentals
+        WHERE rental_id = $1 AND user_id = $2 AND scooter_id = $3 AND status = $4;
+    """
+    async with pool.acquire() as conn:
+        result = await conn.fetchval(sql, rental_id, user_id, scooter_id)
+        return result
 
 
+#######################################3
+# процедура поездки
+async def process_rental(pool: asyncpg.pool.Pool, user_id: str, scooter_id: str, action: str, end_location_id: str = None) -> str:
+    """
+    Вызов процедуры для обработки аренды самоката.
+
+    :param pool: Пул соединений с базой данных.
+    :param user_id: ID пользователя.
+    :param scooter_id: ID самоката.
+    :param action: Действие ('rent' или 'continue').
+    :param end_location_id: Конечная локация (только для 'continue').
+    :return: ID аренды.
+    """
+    logger.info(
+        f"Calling process_rental_action with parameters: "
+        f"user_id={user_id}, scooter_id={scooter_id}, action={action}, end_location_id={end_location_id}"
+    )
+    
+    async with pool.acquire() as conn:
+        try:
+            result = await conn.fetchval(
+                """
+                CALL process_rental_action(
+                    CAST($1 AS UUID),
+                    CAST($2 AS UUID),
+                    CAST($3 AS VARCHAR),
+                    CAST($4 AS UUID)
+                )
+                """,
+                user_id, scooter_id, action, end_location_id
+            )
+            logger.info(f"Rental process completed successfully. Rental ID: {result}")
+            return result
+        except asyncpg.PostgresError as e:
+            logger.error(f"Error during rental process: {e}")
+            raise
+
+
+async def get_active_rental(pool, user_id, scooter_id):
+    query = """
+    SELECT * FROM rentals
+    WHERE user_id = $1 AND scooter_id = $2 AND status = 'active'
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(query, user_id, scooter_id)
+
+
+# вычисление расстояния между локациями
 def haversine(lat1, lon1, lat2, lon2):
     """
     Рассчитывает расстояние между двумя точками на Земле в км.
@@ -611,89 +644,190 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * c
 
 
-async def continue_rental(pool, rental_id, new_location_id):
+# async def continue_rental(pool, rental_id, new_location_id):
+#     """
+#     Продолжить аренду, предварительно проверяя возможность доехать с текущим зарядом.
+#     """
+#     async with pool.acquire() as conn:
+#         # Получаем текущую информацию об аренде и самокате
+#         rental = await conn.fetchrow("""
+#             SELECT r.scooter_id, r.distance_km, s.battery_level, s.battery_consumption, s.speed_limit, l.latitude, l.longitude
+#             FROM rentals r
+#             JOIN scooters s ON r.scooter_id = s.scooter_id
+#             JOIN locations l ON r.end_location_id = l.location_id
+#             WHERE r.rental_id = $1
+#         """, rental_id)
+
+#         if not rental:
+#             raise ValueError("Аренда не найдена.")
+
+#         # Получаем данные новой локации
+#         new_location = await conn.fetchrow("""
+#             SELECT latitude, longitude
+#             FROM locations
+#             WHERE location_id = $1
+#         """, new_location_id)
+
+#         if not new_location:
+#             raise ValueError("Локация не найдена.")
+
+#         # Рассчитываем расстояние до новой локации
+#         distance = haversine(
+#             rental['latitude'], rental['longitude'],
+#             new_location['latitude'], new_location['longitude']
+#         )
+
+#         # Проверяем, хватит ли заряда для поездки
+#         battery_needed = distance * rental['battery_consumption']
+#         if rental['battery_level'] < battery_needed:
+#             raise ValueError("Недостаточно заряда для поездки в выбранную локацию.")
+
+#         # Обновляем данные аренды: расстояние, заряд и локацию
+#         new_distance = rental['distance_km'] + distance
+#         new_battery_level = rental['battery_level'] - battery_needed
+
+#         # Обновляем аренду
+#         await conn.execute("""
+#             UPDATE rentals
+#             SET distance_km = $1, remaining_battery = $2, end_location_id = $3
+#             WHERE rental_id = $4
+#         """, new_distance, new_battery_level, new_location_id, rental_id)
+
+#         # Обновляем заряд самоката
+#         await conn.execute("""
+#             UPDATE scooters
+#             SET battery_level = $1, location_id = $2
+#             WHERE scooter_id = $3
+#         """, new_battery_level, new_location_id, rental['scooter_id'])
+
+#         await flash(f"Поездка обновлена. Заряда осталось: {new_battery_level}%.", "success")
+
+
+
+# async def complete_rental(pool, rental_id):
+#     """
+#     Завершает аренду и рассчитывает стоимость поездки.
+#     """
+#     async with pool.acquire() as conn:
+#         rental = await conn.fetchrow("""
+#             SELECT start_time, NOW() as current_time, price_per_minute, distance_km
+#             FROM rentals
+#             WHERE rental_id = $1 AND status = 'active'
+#         """, rental_id)
+
+#         if not rental:
+#             raise ValueError("Аренда не найдена или уже завершена.")
+
+#         # Рассчитываем длительность
+#         duration_minutes = (rental['current_time'] - rental['start_time']).total_seconds() / 60
+#         total_price = round(duration_minutes * rental['price_per_minute'], 2)
+
+#         # Завершаем аренду
+#         await conn.execute("""
+#             UPDATE rentals
+#             SET status = 'completed', end_time = NOW(), total_price = $1
+#             WHERE rental_id = $2
+#         """, total_price, rental_id)
+
+#         await flash(f"Аренда завершена. Итоговая стоимость: {total_price}₽.", "success")
+
+
+###################
+
+async def reserve_scooter(pool: asyncpg.pool.Pool, user_id: str, scooter_id: str, start_location_id: str = None):
     """
-    Продолжить аренду, предварительно проверяя возможность доехать с текущим зарядом.
+    Забронировать самокат.
+    """
+    price_per_minute = 5.0  # Фиксированная стоимость аренды за минуту
+
+    async with pool.acquire() as conn:
+        # Проверяем, существует ли самокат и его статус
+        scooter = await conn.fetchrow("""
+            SELECT * FROM scooters WHERE scooter_id = $1 AND status = 'available'
+        """, scooter_id)
+
+        if not scooter:
+            raise Exception("Самокат не найден или недоступен.")
+
+        # Получаем location_id, если он не передан
+        if not start_location_id:
+            start_location_id = await conn.fetchval("""
+                SELECT location_id
+                FROM scooters
+                WHERE scooter_id = $1
+            """, scooter_id)
+
+        # Добавляем запись в rentals
+        rental_id = await conn.fetchval("""
+            INSERT INTO rentals (user_id, scooter_id, start_location_id, start_time, status, price_per_minute)
+            VALUES ($1, $2, $3, NOW(), 'reserved', $4)
+            RETURNING rental_id
+        """, user_id, scooter_id, start_location_id, price_per_minute)
+
+        # Обновляем статус самоката
+        await conn.execute("""
+            UPDATE scooters SET status = 'reserved' WHERE scooter_id = $1
+        """, scooter_id)
+
+    return rental_id
+
+
+async def get_all_destinations_with_status(pool: asyncpg.pool.Pool, scooter_id: str):
+    """
+    Получить список доступных локаций для самоката.
+
+    :param pool: Пул соединений.
+    :param scooter_id: ID самоката.
+    :return: Список доступных локаций.
     """
     async with pool.acquire() as conn:
-        # Получаем текущую информацию об аренде и самокате
-        rental = await conn.fetchrow("""
-            SELECT r.scooter_id, r.distance_km, s.battery_level, s.battery_consumption, s.speed_limit, l.latitude, l.longitude
-            FROM rentals r
-            JOIN scooters s ON r.scooter_id = s.scooter_id
-            JOIN locations l ON r.end_location_id = l.location_id
-            WHERE r.rental_id = $1
-        """, rental_id)
+        return await conn.fetch("""
+            SELECT * FROM get_all_destinations_with_status($1)
+        """, scooter_id)
 
-        if not rental:
-            raise ValueError("Аренда не найдена.")
 
-        # Получаем данные новой локации
-        new_location = await conn.fetchrow("""
-            SELECT latitude, longitude
-            FROM locations
-            WHERE location_id = $1
-        """, new_location_id)
-
-        if not new_location:
-            raise ValueError("Локация не найдена.")
-
-        # Рассчитываем расстояние до новой локации
-        distance = haversine(
-            rental['latitude'], rental['longitude'],
-            new_location['latitude'], new_location['longitude']
-        )
-
-        # Проверяем, хватит ли заряда для поездки
-        battery_needed = distance * rental['battery_consumption']
-        if rental['battery_level'] < battery_needed:
-            raise ValueError("Недостаточно заряда для поездки в выбранную локацию.")
-
-        # Обновляем данные аренды: расстояние, заряд и локацию
-        new_distance = rental['distance_km'] + distance
-        new_battery_level = rental['battery_level'] - battery_needed
-
-        # Обновляем аренду
-        await conn.execute("""
-            UPDATE rentals
-            SET distance_km = $1, remaining_battery = $2, end_location_id = $3
-            WHERE rental_id = $4
-        """, new_distance, new_battery_level, new_location_id, rental_id)
-
-        # Обновляем заряд самоката
-        await conn.execute("""
-            UPDATE scooters
-            SET battery_level = $1, location_id = $2
-            WHERE scooter_id = $3
-        """, new_battery_level, new_location_id, rental['scooter_id'])
-
-        await flash(f"Поездка обновлена. Заряда осталось: {new_battery_level}%.", "success")
-
-async def complete_rental(pool, rental_id):
+async def complete_rental(pool: asyncpg.pool.Pool, user_id: str, scooter_id: str, end_location_id: str, comment: str = None) -> str:
     """
-    Завершает аренду и рассчитывает стоимость поездки.
+    Завершить аренду самоката.
+
+    :param pool: Пул соединений.
+    :param user_id: ID пользователя.
+    :param scooter_id: ID самоката.
+    :param end_location_id: Конечная локация.
+    :param comment: Комментарий к поездке.
+    :return: ID аренды.
     """
     async with pool.acquire() as conn:
-        rental = await conn.fetchrow("""
-            SELECT start_time, NOW() as current_time, price_per_minute, distance_km
-            FROM rentals
-            WHERE rental_id = $1 AND status = 'active'
-        """, rental_id)
+        async with conn.transaction():
+            # Получаем активную аренду
+            rental = await conn.fetchrow("""
+                SELECT rental_id, start_time FROM rentals
+                WHERE user_id = $1 AND scooter_id = $2 AND status = 'active' FOR UPDATE
+            """, user_id, scooter_id)
 
-        if not rental:
-            raise ValueError("Аренда не найдена или уже завершена.")
+            if not rental:
+                raise ValueError("Активная аренда не найдена.")
 
-        # Рассчитываем длительность
-        duration_minutes = (rental['current_time'] - rental['start_time']).total_seconds() / 60
-        total_price = round(duration_minutes * rental['price_per_minute'], 2)
+            # Рассчитываем общую стоимость
+            total_price = await conn.fetchval("""
+                SELECT EXTRACT(EPOCH FROM (NOW() - $1)) / 60 * price_per_minute
+                FROM rentals WHERE rental_id = $2
+            """, rental["start_time"], rental["rental_id"])
 
-        # Завершаем аренду
-        await conn.execute("""
-            UPDATE rentals
-            SET status = 'completed', end_time = NOW(), total_price = $1
-            WHERE rental_id = $2
-        """, total_price, rental_id)
+            # Обновляем аренду
+            await conn.execute("""
+                UPDATE rentals
+                SET status = 'completed', end_time = NOW(), total_price = $1, ride_comment = $2, end_location_id = $3
+                WHERE rental_id = $4
+            """, total_price, comment, end_location_id, rental["rental_id"])
 
-        await flash(f"Аренда завершена. Итоговая стоимость: {total_price}₽.", "success")
+            # Обновляем статус самоката
+            await conn.execute("""
+                UPDATE scooters
+                SET status = 'available', location_id = $1
+                WHERE scooter_id = $2
+            """, end_location_id, scooter_id)
+
+            return rental["rental_id"]
 
 

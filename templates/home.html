@@ -1,97 +1,85 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <title>Главная страница - Аренда самокатов</title>
 </head>
 <body>
-    <h1>Сервис аренды самокатов</h1>
+    <header>
+        <h1>Сервис аренды самокатов</h1>
+        <nav>
+            <a href="{{ url_for('main.home') }}">Главная</a>
+            {% if session.get('user_id') %}
+                <a href="/profile">Профиль</a>
+                {% if 'Admin' in g.user_roles %}
+                    <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
+                {% endif %}
+                <a href="{{ url_for('main.logout') }}">Выход</a>
+            {% else %}
+                <a href="{{ url_for('main.login') }}">Вход</a>
+                <a href="{{ url_for('main.register') }}">Регистрация</a>
+            {% endif %}
+        </nav>
 
-    <!-- Форма поиска и фильтрации -->
-    <form method="GET" action="{{ url_for('main.home') }}">
-        <input type="text" name="q" placeholder="Поиск по модели..." value="{{ request.args.get('q', '') }}">
-        
-        <label for="location">Локация:</label>
-        <select name="location">
-            <option value="">Все локации</option>
-            {% for location in locations %}
-                <option value="{{ location.location_id }}" 
-                    {% if request.args.get('location') == location.location_id %}selected{% endif %}>
-                    {{ location.name }}
-                </option>
-            {% endfor %}
-        </select>
+    </header>
+    <main>
+        <!-- Форма поиска и фильтрации -->
+        <form method="GET" action="{{ url_for('main.home') }}" class="search-form">
+            <input type="text" name="q" placeholder="Поиск по модели..." value="{{ request.args.get('q', '') }}" class="search-input">
+            <button type="submit" class="search-button">Поиск</button>
+            <select name="location" class="search-select">
+                <option value="">Все локации</option>
+                {% for location in locations %}
+                    <option value="{{ location.location_id }}" {% if request.args.get('location') == location.location_id %}selected{% endif %}>
+                        {{ location.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label for="min_battery" class="battery-label">Минимальный заряд:</label>
+            <input type="number" name="min_battery" min="0" max="100" value="{{ request.args.get('min_battery', 0) }}" class="search-input">
+        </form>
 
-        <label for="status">Статус:</label>
-        <select name="status">
-            <option value="">Все статусы</option>
-            <option value="available" {% if request.args.get('status') == 'available' %}selected{% endif %}>Доступен</option>
-            <option value="reserved" {% if request.args.get('status') == 'reserved' %}selected{% endif %}>Забронирован</option>
-            <option value="in_use" {% if request.args.get('status') == 'in_use' %}selected{% endif %}>В аренде</option>
-            <option value="on_maintenance" {% if request.args.get('status') == 'on_maintenance' %}selected{% endif %}>В обслуживании</option>
+        <!-- Список самокатов -->
+        <h2>Доступные самокаты</h2>
+        <div class="product-list">
+            {% if scooters %}
+                {% for scooter in scooters %}
+                    <div class="product-item">
+                        <!-- Ссылка на модель -->
+                        <h3>
+                            <a href="{{ url_for('main.scooter_page', scooter_id=scooter.scooter_id) }}" class="product-link">
+                                {{ scooter.model }}
+                            </a>
+                        </h3>
+                        <p><strong>Заряд батареи:</strong> {{ scooter.battery_level }}%</p>
+                        <p><strong>Локация:</strong> {{ scooter.location_name or 'N/A' }}</p>
+                        <p><strong>Статус:</strong> 
+                            {% if scooter.status == 'available' %}Доступен
+                            {% elif scooter.status == 'reserved' %}Забронирован
+                            {% elif scooter.status == 'in_use' %}В аренде
+                            {% elif scooter.status == 'on_maintenance' %}В обслуживании
+                            {% else %}Неизвестный{% endif %}
+                        </p>
 
-        </select>
-
-        <label for="min_battery">Минимальный заряд батареи:</label>
-        <input type="number" name="min_battery" min="0" max="100" value="{{ request.args.get('min_battery', 0) }}">
-
-        <button type="submit">Поиск</button>
-    </form>
-
-    <hr>
-
-    <!-- Сообщение о результатах поиска -->
-    {% if search_message %}
-        <h2>{{ search_message }}</h2>
-    {% endif %}
-
-    <!-- Список самокатов -->
-    <div>
-        {% if scooters %}
-            {% for scooter in scooters %}
-                <div style="border: 1px solid #ddd; padding: 10px; margin-bottom: 10px;">
-                    <h3>Модель: {{ scooter.model }}</h3>
-                    <p>Статус: 
+                        <!-- Кнопка "Забронировать" или "Поехали" -->
                         {% if scooter.status == 'available' %}
-                            Доступен
-                        {% elif scooter.status == 'reserved' %}
-                            Забронирован
-                        {% elif scooter.status == 'in_use' %}
-                            В аренде
-                        {% elif scooter.status == 'on_maintenance' %}
-                            В обслуживании
+                            <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
+                                <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                                <button type="submit" class="add-to-cart-button">Забронировать</button>
+                            </form>
+                        {% elif scooter.status == 'reserved' and session.get('user_id') and scooter.user_reserved %}
+                            <form method="GET" action="{{ url_for('main.select_destination', scooter_id=scooter.scooter_id) }}">
+                                <button type="submit" class="add-to-cart-button">Поехали</button>
+                            </form>
                         {% endif %}
-                    </p>
-                    <p>Заряд батареи: {{ scooter.battery_level }}%</p>
-                    <p>Локация: {{ scooter.location_name }}</p>
-
-                    <!-- Действия пользователя -->
-                    {% if scooter.status == 'available' %}
-                        <!-- Забронировать самокат -->
-                        <form method="POST" action="{{ url_for('main.reserve_scooter_route', scooter_id=scooter.scooter_id) }}">
-                            <button type="submit">Забронировать</button>
-                        </form>
-                    {% elif scooter.status == 'reserved' and scooter.user_reserved %}
-                        <!-- Начать аренду -->
-                        <form method="POST" action="{{ url_for('main.start_rental_route', rental_id=scooter.rental_id) }}">
-                            <button type="submit">Начать аренду</button>
-                        </form>
-                    {% elif scooter.status == 'reserved' %}
-                        <p>Этот самокат уже забронирован другим пользователем.</p>
-                    {% elif scooter.status == 'in_use' %}
-                        <p>Самокат уже находится в аренде.</p>
-                    {% elif scooter.status == 'in_use' %}
-                        <p>Самокат находится в обслуживании.</p>
-                    {% endif %}
-
-                    <!-- Ссылка на страницу самоката -->
-                    <a href="{{ url_for('main.scooter_page', scooter_id=scooter.scooter_id) }}">Подробнее</a>
-                </div>
-            {% endfor %}
-        {% else %}
-            <p>Самокаты не найдены. Попробуйте изменить параметры поиска.</p>
-        {% endif %}
-    </div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>Самокаты не найдены. Попробуйте изменить параметры поиска.</p>
+            {% endif %}
+        </div>
+    </main>
 </body>
 </html>
