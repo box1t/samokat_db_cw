@@ -6,6 +6,7 @@ from app.utils import *
 from dotenv import load_dotenv
 import glob
 import subprocess
+from datetime import datetime
 
 admin = Blueprint('admin', __name__, url_prefix='/admin')
 
@@ -156,25 +157,49 @@ async def manage_scooters():
         locations=locations
     )
 
-# # вместо order - rental status
-# @admin.route('/orders', methods=['GET', 'POST'])
-# @admin_required
-# async def manage_orders():
-#     """
-#     Управление заказами: просмотр и изменение статуса.
-#     """
-#     if request.method == 'POST':
-#         form = await request.form
-#         order_id = form.get('order_id')
-#         new_status = form.get('status')
+# вместо order - rental status
+@admin.route('/manage_rentals', methods=['GET', 'POST'])
+@admin_required
+async def manage_rentals():
+    if request.method == 'POST':
+        form = await request.form
+        order_id = form.get('order_id')
+        new_status = form.get('status')
 
-#         await update_order_status(current_app.db_pool, order_id, new_status)
-#         await flash('Статус заказа обновлен.', 'success')
-#         return redirect(url_for('admin.manage_orders'))
+        if order_id and new_status:
+            try:
+                await update_rental_status(current_app.db_pool, order_id, new_status)
+                await flash('Статус аренды обновлен.', 'success')
+            except Exception as e:
+                current_app.logger.error(f"Ошибка при обновлении статуса аренды: {e}")
+                await flash('Ошибка при обновлении статуса аренды.', 'danger')
+        return redirect(url_for('admin.manage_rentals'))
 
-#     # GET-запрос: отображаем список заказов
-#     orders = await get_all_orders(current_app.db_pool)
-#     return await render_template('admin/manage_orders.html', orders=orders)
+    # GET-запрос: отображаем список всех аренд
+    orders = await get_all_rentals(current_app.db_pool)
+
+    # Опционально: получение аналитики
+    # Допустим, мы хотим видеть статистику по определенному самокату, если указан scooter_id в GET параметрах
+    scooter_id = request.args.get('scooter_id')
+    scooter_stats = None
+    if scooter_id:
+        rental_count = await get_rental_count_by_scooter(current_app.db_pool, scooter_id)
+        avg_duration = await get_avg_rental_duration_by_scooter(current_app.db_pool, scooter_id)
+        scooter_stats = {
+            'scooter_id': scooter_id,
+            'rental_count': rental_count,
+            'avg_duration': round(avg_duration or 0, 2)
+        }
+
+    # Можно также вывести общую метрику: например, общее количество аренд:
+    total_rentals = len(orders)  # Поскольку get_all_rentals возвращает список, можно взять длину
+
+    return await render_template(
+        'admin/manage_rentals.html',
+        orders=orders,
+        total_rentals=total_rentals,
+        scooter_stats=scooter_stats
+    )
 
 
 
@@ -193,9 +218,9 @@ async def backup_database():
     import subprocess
 
     # Путь к резервной копии
-    backup_dir = '/home/snowwy/Desktop/MAI/samokat_db_cw/samokat_db_cw/backups'
+    backup_dir = '/home/snowwy/Desktop/MAI/samokat_db_cw/samokat_db_cw/backups/'
     os.makedirs(backup_dir, exist_ok=True)
-    backup_file = os.path.join(backup_dir, f'backup_{datetime.datetime.now().strftime("%Y%m%d%H%M%S")}.sql')
+    backup_file = os.path.join(backup_dir, f'backup_{datetime.now().strftime("%Y%m%d%H%M%S")}.sql')
 
     # Команда для резервного копирования
     db_name = os.getenv("DB_NAME")

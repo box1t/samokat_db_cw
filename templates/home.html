@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,21 +22,22 @@
                 <a href="{{ url_for('main.register') }}">Регистрация</a>
             {% endif %}
         </nav>
-
     </header>
     <main>
         <!-- Форма поиска и фильтрации -->
         <form method="GET" action="{{ url_for('main.home') }}" class="search-form">
             <input type="text" name="q" placeholder="Поиск по модели..." value="{{ request.args.get('q', '') }}" class="search-input">
             <button type="submit" class="search-button">Поиск</button>
+            
             <select name="location" class="search-select">
-                <option value="">Все локации</option>
+                <option value="" {% if selected_location_id == '' %}selected{% endif %}>Все локации</option>                
                 {% for location in locations %}
-                    <option value="{{ location.location_id }}" {% if request.args.get('location') == location.location_id %}selected{% endif %}>
+                    <option value="{{ location.location_id }}" {% if selected_location_id == location.location_id %}selected{% endif %}>
                         {{ location.name }}
                     </option>
                 {% endfor %}
             </select>
+            
             <label for="min_battery" class="battery-label">Минимальный заряд:</label>
             <input type="number" name="min_battery" min="0" max="100" value="{{ request.args.get('min_battery', 0) }}" class="search-input">
         </form>
@@ -71,17 +72,17 @@
                             <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
                                 <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
                                 <input type="hidden" name="action" value="reserve">
-                                <input type="hidden" name="redirect_url" value="{{ request.url }}"> <!-- Добавлено поле -->
+                                <input type="hidden" name="redirect_url" value="{{ request.url }}">
                                 <button type="submit" class="add-to-cart-button">Забронировать</button>
                             </form>
                         {% elif scooter.status == 'reserved' and session.get('user_id') and scooter.user_reserved %}
                             <form method="GET" action="{{ url_for('main.select_destination', scooter_id=scooter.scooter_id) }}">
-                                <input type="hidden" name="redirect_url" value="{{ request.url }}"> <!-- Добавлено поле -->
+                                <input type="hidden" name="redirect_url" value="{{ request.url }}">
                                 <button type="submit" class="add-to-cart-button">Поехали</button>
                             </form>
                             <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
                                 <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
-                                <input type="hidden" name="redirect_url" value="{{ request.url }}"> <!-- Добавлено поле -->
+                                <input type="hidden" name="redirect_url" value="{{ request.url }}">
                                 <input type="hidden" name="action" value="cancel">
                                 <button type="submit" class="add-to-cart-button">Отменить</button>
                             </form>

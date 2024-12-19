@@ -68,7 +68,8 @@ async def home():
             "home.html",
             scooters=scooters,
             locations=locations,
-            search_message=search_message
+            search_message=search_message,
+            selected_location_id=location_id
         )
     except Exception as e:
         logger.error(f"Ошибка при загрузке главной страницы: {e}")
@@ -449,38 +450,6 @@ async def confirm_rental(scooter_id):
         return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
 
 # 4. trip_details.html
-@main.route("/rental/start", methods=["POST"])
-async def start_rental_route():
-    """
-    Начать аренду самоката.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        await flash("Пожалуйста, войдите в систему.", "warning")
-        return redirect(url_for("main.login"))
-
-    form = await request.form
-    scooter_id = form.get("scooter_id")
-
-    if not scooter_id:
-        await flash("Не указан ID самоката.", "danger")
-        return redirect(url_for("main.home"))
-
-    try:
-        rental_id = await process_rental(
-            pool=current_app.db_pool,
-            user_id=user_id,
-            scooter_id=scooter_id,
-            action="rent"
-        )
-        await flash(f"Аренда начата. ID аренды: {rental_id}", "success")
-    except Exception as e:
-        logger.error(f"Ошибка при начале аренды самоката {scooter_id}: {e}")
-        await flash(str(e), "danger")
-
-    return redirect(url_for("main.trip_details"))
-
-# 5. trip_details.html
 @main.route("/rental/continue", methods=["POST"])
 async def continue_rental():
     """
@@ -514,7 +483,7 @@ async def continue_rental():
 
     return redirect(url_for("main.trip_details"))
 
-# 6. trip_details.html
+# 5. trip_details.html
 @main.route("/rental/complete", methods=["POST"])
 async def complete_rental_route():
     """
@@ -544,5 +513,5 @@ async def complete_rental_route():
         logger.error(f"Ошибка при завершении аренды: {e}")
         await flash("Ошибка при завершении аренды.", "danger")
 
-    return redirect(url_for("main.scooter_page"))
+    return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
 

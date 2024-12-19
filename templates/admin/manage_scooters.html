@@ -123,7 +123,7 @@
                         <td><label for="location_id">Локация:</label></td>
                         <td>
                             <select name="location_id" id="location_id">
-                                <option value="">Без локации</option>
+                                <option value="" disabled selected>Без локации</option>
                                 {% for location in locations %}
                                     <option value="{{ location.location_id }}">{{ location.name }}</option>
                                 {% endfor %}
@@ -154,7 +154,7 @@
                 <input type="hidden" name="action" value="service">
                 <label for="service_location">Выберите локацию:</label>
                 <select name="location_id" id="service_location" required>
-                    <option value="" disabled selected>Выберите локацию</option>
+                    <option value="" disabled selected>Без локации</option>
                     {% for location in locations %}
                         <option value="{{ location.location_id }}">{{ location.name }}</option>
                     {% endfor %}
