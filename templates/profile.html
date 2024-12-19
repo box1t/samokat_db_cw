@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Профиль</title>
-    <link rel="stylesheet" href="../static/styles.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <style>
         /* Стили для точек и выравнивания списка */
         .recent-rentals ul {
@@ -39,7 +39,7 @@
         <nav>
             <a href="{{ url_for('main.home') }}">Главная</a>
             {% if session.get('user_id') %}
-                <a href="/profile">Профиль</a>
+                <a href="{{ url_for('main.profile') }}">Профиль</a>
                 {% if 'Admin' in g.user_roles %}
                     <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
                 {% endif %}
@@ -52,25 +52,48 @@
     </header>
     <main>
         <div class="profile-info">
-            <p><strong>Email:</strong> {{ email }}</p>
-            <p><strong>Username:</strong> {{ username }}</p><br>
+            <p><strong>Email:</strong> {{ email or 'N/A' }}</p>
+            <p><strong>Username:</strong> {{ username or 'N/A' }}</p><br>
         </div>
+
         <section class="recent-rentals">
             <h3>Последние поездки</h3>
+
+            <!-- Кнопки пагинации -->
+            <div class="pagination" style="margin-top: 10px">
+                <form method="get" action="{{ url_for('main.profile') }}" style="display: inline;">
+                    {% if page > 1 %}
+                        <input type="hidden" name="page" value="{{ page - 1 }}">
+                        <button type="submit" style="background-color: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">
+                            Предыдущая
+                        </button>
+                    {% endif %}
+                </form>
+                <form method="get" action="{{ url_for('main.profile') }}" style="display: inline;">
+                    {% if has_more %}
+                        <input type="hidden" name="page" value="{{ page + 1 }}">
+                        <button type="submit" style="background-color: #007bff; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">
+                            Следующая
+                        </button>
+                    {% endif %}
+                </form>
+            </div>
+
             {% if last_rentals %}
                 <ul>
                     {% for rental in last_rentals %}
                         <li>
                             <p>
                                 <strong>Дата завершения поездки:</strong> 
-                                {{ rental.end_time.strftime('%Y-%m-%d %H:%M') or 'N/A' }} <!-- Форматирование даты -->
+                                {{ rental.end_time.strftime('%Y-%m-%d %H:%M') if rental.end_time else 'N/A' }}
                             </p>
-                            <p><strong>Стоимость:</strong> {{ rental.total_price }} ₽</p>
+                            <p><strong>Стоимость:</strong> 
+                                {{ rental.total_price if rental.total_price is not none else 'N/A' }} ₽
+                            </p>
                             <p><strong>Локации:</strong></p>
                             <ul>
-                                {% for product in order.products %}
-                                    <li>{{ product }}</li>
-                                {% endfor %}
+                                <li>Начальная: {{ rental.start_location_name or 'N/A' }}</li>
+                                <li>Конечная: {{ rental.end_location_name or 'N/A' }}</li>
                             </ul>
                         </li>
                     {% endfor %}
@@ -78,6 +101,7 @@
             {% else %}
                 <p>У вас пока нет поездок.</p>
             {% endif %}
+
         </section>
     </main>
 </body>

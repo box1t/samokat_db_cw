@@ -216,7 +216,7 @@ BEGIN
     -- Получаем информацию о самокате
     SELECT * INTO scooter
     FROM scooters s
-    WHERE s.scooter_id = process_rental_action.scooter_id FOR UPDATE;
+    WHERE s.scooter_id = scooter_id FOR UPDATE;
 
     IF scooter IS NULL THEN
         RAISE EXCEPTION 'Самокат не найден.';
@@ -283,6 +283,5 @@ BEGIN
     END IF;
 END;
 $$;
-
 
 

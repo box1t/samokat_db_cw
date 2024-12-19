@@ -23,6 +23,17 @@
         </nav>
     </header>
     <main>
+        <!-- Блок для отображения сообщений -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="messages">
+                    {% for category, message in messages %}
+                        <p class="message {{ category }}">{{ message }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
         <p><strong>Локация:</strong> {{ scooters.location_name or 'N/A' }}</p>
         <p><strong>Статус:</strong> {{ scooters.status }}</p>
         <p><strong>Текущий заряд:</strong> {{ scooters.battery_level }}%</p>
@@ -30,15 +41,25 @@
         <p><strong>Ограничение скорости:</strong> {{ scooters.speed_limit }} км/ч</p>
         <p><strong>Дата последнего обслуживания:</strong> {{ scooters.last_maintenance_date.strftime('%Y-%m-%d %H:%M') if scooters.last_maintenance_date else 'N/A' }}</p>
 
-        <!-- Кнопка действия в зависимости от статуса -->
+        <!-- Кнопки действий в зависимости от статуса -->
         {% if scooters.status == 'available' %}
             <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
                 <input type="hidden" name="scooter_id" value="{{ scooters.scooter_id }}">
+                <input type="hidden" name="action" value="reserve">
+                <input type="hidden" name="redirect_url" value="{{ request.url }}"> <!-- Добавлено поле -->
                 <button type="submit" class="action-button">Забронировать</button>
             </form>
+        
         {% elif scooters.status == 'reserved' and session.get('user_id') and scooters.user_reserved %}
             <form method="GET" action="{{ url_for('main.select_destination', scooter_id=scooters.scooter_id) }}">
+                <input type="hidden" name="redirect_url" value="{{ request.url }}"> <!-- Добавлено поле -->
                 <button type="submit" class="action-button">Поехали</button>
+            </form>
+            <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
+                <input type="hidden" name="scooter_id" value="{{ scooters.scooter_id }}">
+                <input type="hidden" name="action" value="cancel">
+                <input type="hidden" name="redirect_url" value="{{ request.url }}"> <!-- Добавлено поле -->
+                <button type="submit" class="action-button">Отменить</button>
             </form>
         {% else %}
             <p>Этот самокат недоступен для бронирования или использования в данный момент.</p>
@@ -60,7 +81,10 @@
         {% endif %}
 
         {% if session.get('user_id') %}
-            <h3>Оставить отзыв</h3>
+        <h3>Оставить отзыв</h3>
+        {% if not last_rental %}
+            <p>Вы не можете оставить отзыв, так как у вас нет завершенных поездок на этом самокате.</p>
+        {% elif last_rental and not last_rental.has_review %}
             <form method="POST">
                 <input type="hidden" name="rental_id" value="{{ last_rental.id }}">
                 <p>
@@ -79,6 +103,9 @@
                 </p>
                 <button type="submit">Отправить отзыв</button>
             </form>
+        {% else %}
+            <p>Вы не можете оставить отзыв, так как вы уже оставили отзыв для этой поездки.</p>
+        {% endif %}
         {% else %}
             <p><a href="{{ url_for('main.login') }}">Войдите в систему</a>, чтобы оставить отзыв.</p>
         {% endif %}

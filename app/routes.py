@@ -83,14 +83,8 @@ async def home():
 @main.route("/profile")
 async def profile():
     """
-    Страница профиля пользователя.
-    
-    1. Создаётся сессия с привязкой к user_id, иначе - сброс на логин страницу, warning.
-    2. Поиск информации по user_id для вывода на странице профиля, иначе - сброс на home страницу, warning.
-    3. Вызов get_last_rentals - 5 заказов на страницу.
-    4. Рендер шаблона profile.html
+    Страница профиля пользователя с поддержкой пагинации.
     """
-
     user_id = session.get("user_id")
     if not user_id:
         await flash("Пожалуйста, войдите в систему.", "warning")
@@ -103,19 +97,33 @@ async def profile():
             await flash("Информация о пользователе не найдена.", "danger")
             return redirect(url_for("main.login"))
 
-        # Получаем последние пять заказов
-        last_rentals = await get_last_rentals(current_app.db_pool, user_id)
+        # Параметры пагинации
+        page = int(request.args.get("page", 1))
+        limit = 5
+        offset = (page - 1) * limit
+
+        # Получаем поездки с учетом пагинации
+        last_rentals = await get_last_rentals(current_app.db_pool, user_id, limit=limit, offset=offset)
+
+        # Проверяем, есть ли следующая страница
+        has_more = len(last_rentals) == limit
+        has_previous = page > 1
+
 
         return await render_template(
             "profile.html",
             username=user["username"],
             email=user["email"],
-            last_rentals=last_rentals
+            last_rentals=last_rentals,
+            page=page,
+            has_more=has_more,
+            has_previous=has_previous
         )
     except Exception as e:
         current_app.logger.error(f"Ошибка при загрузке профиля пользователя {user_id}: {e}")
         await flash("Произошла ошибка при загрузке профиля.", "danger")
         return redirect(url_for("main.home"))
+
 
 
 @main.route("/register", methods=["GET", "POST"])
@@ -247,42 +255,33 @@ async def logout():
 
 @main.route("/scooter/<scooter_id>", methods=["GET", "POST"])
 async def scooter_page(scooter_id):
-    """
-    Страница самоката с описанием, количеством аренд, средней продолжительностью и отзывами.
-    """
     user_id = session.get("user_id")
 
-    # Обработка POST-запроса для добавления отзыва
     if request.method == "POST":
         if not user_id:
             await flash("Пожалуйста, войдите в систему, чтобы оставить отзыв.", "warning")
             return redirect(url_for("main.login"))
 
         form = await request.form
+        rental_id = form.get("rental_id")
         rating = int(form.get("rating"))
         review_text = form.get("review_text")
-        rental_id = form.get("rental_id")  # rental_id из формы (заполняется автоматически)
 
         if not rental_id:
             await flash("Не указана аренда, к которой привязан отзыв.", "warning")
             return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
 
-        if rating < 1 or rating > 5:
-            await flash("Оценка должна быть от 1 до 5.", "warning")
-            return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
-
-        if not review_text:
-            await flash("Комментарий не может быть пустым.", "warning")
-            return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
-
         try:
-            # Проверяем, завершил ли пользователь эту аренду
             rental = await get_rental_by_id(current_app.db_pool, rental_id, user_id, scooter_id, status='completed')
             if not rental:
                 await flash("Аренда не найдена или не завершена.", "danger")
                 return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
 
-            # Добавляем отзыв
+            existing_review = await get_review_by_rental_id(current_app.db_pool, rental_id)
+            if existing_review:
+                await flash("Вы уже оставили отзыв для этой аренды.", "warning")
+                return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
+
             await add_scooter_review(current_app.db_pool, rental_id, scooter_id, user_id, rating, review_text)
             await flash("Ваш отзыв успешно добавлен.", "success")
         except Exception as e:
@@ -291,7 +290,6 @@ async def scooter_page(scooter_id):
 
         return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
 
-    # Обработка GET-запроса для загрузки данных
     try:
         scooter = await get_scooter_by_id_second(current_app.db_pool, scooter_id, user_id)
         if not scooter:
@@ -299,25 +297,25 @@ async def scooter_page(scooter_id):
             return redirect(url_for("main.home"))
 
         reviews = await get_reviews_by_scooter_id(current_app.db_pool, scooter_id)
-
-# Make a dashboard from view here
         rental_count = await get_rental_count_by_scooter(current_app.db_pool, scooter_id)
-        avg_duration = await get_avg_rental_duration_by_scooter(current_app.db_pool, scooter_id)        
+        avg_duration = await get_avg_rental_duration_by_scooter(current_app.db_pool, scooter_id)
         last_rental = await get_last_completed_rental(current_app.db_pool, user_id, scooter_id)
+
+        logger.debug(f"Last rental: {last_rental}")
 
         return await render_template(
             "scooter_page.html",
-            scooters=scooter,  # изменено product -> scooters
+            scooters=scooter,
             reviews=reviews,
             rental_count=rental_count or 0,
             avg_duration=round(avg_duration or 0, 2),
             last_rental=last_rental
         )
-
     except Exception as e:
         logger.error(f"Ошибка при загрузке страницы самоката: {e}")
         await flash("Произошла ошибка при загрузке страницы самоката.", "danger")
         return redirect(url_for("main.home"))
+
 
 
 ######################################################################
@@ -329,7 +327,7 @@ async def scooter_page(scooter_id):
 @main.route("/rental/reserve_scooter", methods=["POST"])
 async def reserve_scooter_route():
     """
-    Забронировать самокат.
+    Забронировать или отменить бронь самоката.
     """
     user_id = session.get("user_id")
     if not user_id:
@@ -338,22 +336,35 @@ async def reserve_scooter_route():
 
     form = await request.form
     scooter_id = form.get("scooter_id")
-    start_location_id = form.get("start_location_id")  # Исправлено
+    start_location_id = form.get("start_location_id")
+    action = form.get("action")  # Добавлено поле для действия
+    redirect_url = form.get("redirect_url", url_for("main.home"))  # Получаем URL для редиректа
 
     try:
-        # Вызов функции бронирования
-        rental_id = await reserve_scooter(
-            current_app.db_pool,
-            user_id=user_id,
-            scooter_id=scooter_id,
-            start_location_id=start_location_id
-        )
-        await flash(f"Самокат успешно забронирован. ID бронирования: {rental_id}", "success")
+        if action == "reserve":
+            # Вызов функции бронирования
+            rental_id = await reserve_scooter(
+                current_app.db_pool,
+                user_id=user_id,
+                scooter_id=scooter_id,
+                start_location_id=start_location_id
+            )
+            await flash(f"Самокат успешно забронирован. ID бронирования: {rental_id}", "success")
+        elif action == "cancel":
+            # Вызов функции отмены бронирования
+            await cancel_reservation(
+                current_app.db_pool,
+                user_id=user_id,
+                scooter_id=scooter_id
+            )
+            await flash("Бронь успешно отменена.", "success")
+        else:
+            await flash("Неверное действие.", "danger")
     except Exception as e:
-        logger.error(f"Ошибка при бронировании самоката: {e}")
-        await flash("Ошибка при бронировании самоката.", "danger")
+        logger.error(f"Ошибка: {e}")
+        await flash("Ошибка при обработке запроса.", "danger")
 
-    return redirect(url_for("main.home"))
+    return redirect(redirect_url)
 
 # 2. home/header -> trip_details.html
 @main.route("/rental/select_destination/<scooter_id>", methods=["GET"])

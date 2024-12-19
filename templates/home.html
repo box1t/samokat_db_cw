@@ -44,6 +44,7 @@
         <!-- Список самокатов -->
         <h2>Доступные самокаты</h2>
         <div class="product-list">
+            {% set show_go_button = scooters|selectattr('status', 'equalto', 'reserved')|selectattr('user_reserved', 'true')|list %}
             {% if scooters %}
                 {% for scooter in scooters %}
                     <div class="product-item">
@@ -63,15 +64,26 @@
                             {% else %}Неизвестный{% endif %}
                         </p>
 
-                        <!-- Кнопка "Забронировать" или "Поехали" -->
-                        {% if scooter.status == 'available' %}
+                        <!-- Кнопки "Забронировать", "Поехали", или "Отменить" -->
+                        {% if show_go_button and scooter.status == 'available' %}
+                            <!-- Ничего не показываем -->
+                        {% elif scooter.status == 'available' %}
                             <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
                                 <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                                <input type="hidden" name="action" value="reserve">
+                                <input type="hidden" name="redirect_url" value="{{ request.url }}"> <!-- Добавлено поле -->
                                 <button type="submit" class="add-to-cart-button">Забронировать</button>
                             </form>
                         {% elif scooter.status == 'reserved' and session.get('user_id') and scooter.user_reserved %}
                             <form method="GET" action="{{ url_for('main.select_destination', scooter_id=scooter.scooter_id) }}">
+                                <input type="hidden" name="redirect_url" value="{{ request.url }}"> <!-- Добавлено поле -->
                                 <button type="submit" class="add-to-cart-button">Поехали</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
+                                <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                                <input type="hidden" name="redirect_url" value="{{ request.url }}"> <!-- Добавлено поле -->
+                                <input type="hidden" name="action" value="cancel">
+                                <button type="submit" class="add-to-cart-button">Отменить</button>
                             </form>
                         {% endif %}
                     </div>

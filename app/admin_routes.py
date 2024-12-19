@@ -11,7 +11,6 @@ admin = Blueprint('admin', __name__, url_prefix='/admin')
 
 load_dotenv()
 
-
 @admin.route('/')
 @admin_required
 async def admin_dashboard():
@@ -23,82 +22,6 @@ async def admin_dashboard():
 ######################################################################
                             #Change/Update data
 ######################################################################
-
-
-@admin.route('/edit_scooters', methods=['GET', 'POST'])
-@admin_required
-async def edit_scooters():
-    """
-    Редактирование самокатов: просмотр, добавление, редактирование, удаление.
-    """
-    if request.method == 'POST':
-        form = await request.form
-        action = form.get('action')
-
-        if action == 'add':
-            # Добавление нового самоката
-            model = form.get('model')
-            battery_level = int(form.get('battery_level'))
-            status = form.get('status', 'available')  # Используем строковый статус вместо is_available
-            location_id = form.get('location_id') or None
-            battery_consumption = float(form.get('battery_consumption', 1.5))
-            speed_limit = float(form.get('speed_limit', 20.0))
-            last_maintenance_date = form.get('last_maintenance_date') or None
-
-            if await is_duplicate_scooter_characteristics(
-                current_app.db_pool, model, speed_limit, battery_consumption
-            ):
-                await flash('У этой модели уже существуют такие характеристики скорости и расхода электричества.', 'error')
-                return redirect(url_for('admin.edit_scooters'))
-
-
-            await add_scooter(
-                current_app.db_pool, model, battery_level, status,
-                location_id, battery_consumption, speed_limit, last_maintenance_date
-            )
-            await flash('Самокат добавлен.', 'success')
-
-        elif action == 'edit':
-            # Редактирование существующего самоката
-            scooter_id = form.get('scooter_id')
-            model = form.get('model')
-            battery_level = int(form.get('battery_level'))
-            status = form.get('status', 'available')
-            location_id = form.get('location_id') or None
-            battery_consumption = float(form.get('battery_consumption', 1.5))
-            speed_limit = float(form.get('speed_limit', 20.0))
-            last_maintenance_date = form.get('last_maintenance_date') or None
-
-            if await is_duplicate_scooter_characteristics(
-                current_app.db_pool, model, speed_limit, battery_consumption, scooter_id
-            ):
-                await flash('У этой модели уже существуют такие характеристики скорости и расхода электричества.', 'error')
-                return redirect(url_for('admin.edit_scooters'))
-
-
-            await update_scooter(
-                current_app.db_pool, scooter_id, model, battery_level, status,
-                location_id, last_maintenance_date, battery_consumption, speed_limit
-            )
-            await flash('Информация о самокате обновлена.', 'success')
-
-        elif action == 'delete':
-            # Удаление самоката
-            scooter_id = form.get('scooter_id')
-            await delete_scooter(current_app.db_pool, scooter_id)
-            await flash('Самокат удален.', 'success')
-
-        return redirect(url_for('admin.edit_scooters'))
-
-    # GET-запрос: отображаем список самокатов с информацией о локациях
-    scooters = await get_scooters_with_options(current_app.db_pool, include_location=True)
-    locations = await get_all_locations(current_app.db_pool)
-
-    return await render_template(
-        'admin/edit_scooters.html',
-        scooters=scooters,
-        locations=locations
-    )
 
 @admin.route('/manage_locations', methods=['GET', 'POST'])
 @admin_required
@@ -156,14 +79,70 @@ async def manage_scooters():
             # Обслужить все самокаты в выбранной локации
             location_id = form.get('location_id')
             await service_scooters_in_location(current_app.db_pool, location_id)
-            await flash('Самокаты в локации обслужены и переведены в статус "maintenance".', 'success')
+            await flash('Самокаты в локации обслужены и переведены в статус "on_maintenance".', 'success')
         
         elif action == 'update_status':
             # Обновить статус конкретного самоката
             scooter_id = form.get('scooter_id')
-            status = form.get('status')  # Новый статус (например, 'available', 'in_use', 'on_maintenance', 'reserved')
+            status = form.get('status')  
             await update_scooter_status(current_app.db_pool, scooter_id, status)
             await flash(f'Статус самоката обновлен: {status}.', 'success')
+
+        elif action == 'edit':
+            # Редактирование существующего самоката
+            scooter_id = form.get('scooter_id')
+            model = form.get('model')
+            battery_level = int(form.get('battery_level'))
+            status = form.get('status', 'available')
+            location_id = form.get('location_id') or None
+            battery_consumption = float(form.get('battery_consumption', 1.5))
+            speed_limit = float(form.get('speed_limit', 20.0))
+            last_maintenance_date = form.get('last_maintenance_date') or None
+
+            # Преобразование строки даты в объект datetime.date
+            if last_maintenance_date:
+                last_maintenance_date = datetime.strptime(last_maintenance_date, '%Y-%m-%d').date()
+
+
+            if await is_duplicate_scooter_characteristics(
+                current_app.db_pool, model, speed_limit, battery_consumption, scooter_id
+            ):
+                await flash('У этой модели уже существуют такие характеристики скорости и расхода электричества.', 'error')
+                return redirect(url_for('admin.manage_scooters'))
+
+
+            await update_scooter(
+                current_app.db_pool, scooter_id, model, battery_level, status,
+                location_id, last_maintenance_date, battery_consumption, speed_limit
+            )
+            await flash('Информация о самокате обновлена.', 'success')
+
+        elif action == 'delete':
+            # Удаление самоката
+            scooter_id = form.get('scooter_id')
+            await delete_scooter(current_app.db_pool, scooter_id)
+            await flash('Самокат удален.', 'success')
+
+        elif action == 'add':
+            # Добавление нового самоката
+            model = form.get('model')
+            battery_level = int(form.get('battery_level'))
+            status = form.get('status', 'available')
+            location_id = form.get('location_id') or None
+            battery_consumption = float(form.get('battery_consumption', 1.5))
+            speed_limit = float(form.get('speed_limit', 20.0))
+            last_maintenance_date = form.get('last_maintenance_date') or None
+
+            # Преобразование строки даты в объект datetime.date
+            if last_maintenance_date:
+                last_maintenance_date = datetime.strptime(last_maintenance_date, '%Y-%m-%d').date()
+
+
+            await add_scooter(
+                current_app.db_pool, model, battery_level, status, location_id,
+                battery_consumption, speed_limit, last_maintenance_date
+            )
+            await flash('Новый самокат добавлен.', 'success')
 
         return redirect(url_for('admin.manage_scooters'))
 
