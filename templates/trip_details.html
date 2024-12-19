@@ -40,11 +40,12 @@
 
         <!-- Информация о текущей поездке -->
         <section>
-            <h2>Информация о поездке</h2>
+            <h3>Информация о поездке</h3>
             {% if rental %}
                 <p><strong>ID аренды:</strong> {{ rental.rental_id }}</p>
                 <p><strong>Самокат:</strong> {{ scooter.model }}</p>
-                <p><strong>Текущая локация:</strong> {{ rental.end_location_id or 'Не выбрана' }}</p>
+                <p><strong>Уровень заряда:</strong> {{ scooter.battery_level }}%</p>
+                <p><strong>Текущая локация:</strong> {{ destinations[0].location_name or 'Не выбрана' }}</p>
                 <p><strong>Статус поездки:</strong> {{ rental.status }}</p>
             {% else %}
                 <p>Информация о текущей аренде недоступна.</p>
@@ -53,15 +54,19 @@
 
         <!-- Форма выбора локации -->
         <section>
-            <h2>Выберите пункт назначения</h2>
+            <h3>Выберите пункт назначения</h3>
             {% if destinations|length > 0 %}
                 <form method="POST" action="{{ url_for('main.confirm_rental', scooter_id=scooter.scooter_id) }}">
                     <div class="destination-list">
-                        {% for destination in destinations %}
-                        <label>
+                        {% for destination in destinations[1:] %}
+                        <label class="destination-card">
                             <input type="radio" name="end_location_id" value="{{ destination.location_id }}" required>
-                            {{ destination.location_name }}
-                        </label>
+                            <div class="destination-details">
+                                <h3>{{ destination.location_name }}</h3>
+                                <p><strong>Расстояние:</strong> {{ "%.2f"|format(destination.distance_km) }} км</p>
+                                <p><strong>Расход заряда:</strong> {{ "%.2f"|format(destination.battery_needed) }}%</p>
+                            </div>
+                        </label class="destination-card">
                         {% endfor %}
                     </div>
                     <button type="submit">Подтвердить</button>
@@ -74,7 +79,7 @@
         <!-- Кнопки для продолжения или завершения аренды -->
         <section>
             <h2>Управление поездкой</h2>
-            {% if rental %}
+            {% if rental.status == 'active' %}
                 <form method="POST" action="{{ url_for('main.continue_rental') }}">
                     <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
                     <input type="hidden" name="end_location_id" value="{{ rental.end_location_id }}">

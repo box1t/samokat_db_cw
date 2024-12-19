@@ -500,6 +500,11 @@ async def complete_rental_route():
     comment = form.get("comment")
 
     try:
+
+        if end_location_id == '':
+            end_location_id = None
+
+
         # Завершаем аренду
         rental_id = await complete_rental(
             current_app.db_pool,

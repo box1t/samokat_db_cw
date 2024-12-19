@@ -147,6 +147,31 @@
             </form>
         </div>
 
+        <!-- Список локаций с уровнями заряда -->
+        <h2>Количество самокатов по уровням заряда</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Локация</th>
+                    <th>Заряд < 20%</th>
+                    <th>Заряд 20–50%</th>
+                    <th>Заряд > 50%</th>
+                    <th>Общее количество</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for location in locations_battery_counts %}
+                <tr {% if location.location_name == 'Итого' %}style="font-weight: bold;"{% endif %}>
+                    <td>{{ location.location_name }}</td>
+                    <td>{{ location.low_battery_count }}</td>
+                    <td>{{ location.medium_battery_count }}</td>
+                    <td>{{ location.high_battery_count }}</td>
+                    <td>{{ location.low_battery_count + location.medium_battery_count + location.high_battery_count }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
         <!-- Обслуживание самокатов -->
         <div class="form-section">
             <h2>Обслуживание самокатов</h2>
@@ -162,7 +187,6 @@
                 <button type="submit">Обслужить</button>
             </form>
         </div>
-
 
         <!-- Список самокатов -->
         <h2>Список самокатов</h2>

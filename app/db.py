@@ -5,7 +5,9 @@ import logging
 from datetime import datetime, timezone
 import math
 from math import ceil
-
+import matplotlib.pyplot as plt
+import io
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +270,8 @@ async def service_scooters_in_location(pool, location_id):
         await conn.execute("""
             UPDATE scooters
             SET status = 'on_maintenance', 
-                last_maintenance_date = CURRENT_TIMESTAMP
+                last_maintenance_date = CURRENT_TIMESTAMP,
+                battery_level = 100
             WHERE location_id = $1
         """, location_id)
 
@@ -622,6 +625,49 @@ async def get_review_by_rental_id(pool: asyncpg.pool.Pool, rental_id: str):
 #            )
 #        return rental_id
 
+async def get_low_battery_scooters_by_location(pool):
+    """
+    Подсчитать количество самокатов по уровням заряда (< 20%, 20–50%, > 50%) для каждой локации.
+    Добавить итоговую строку с общими суммами.
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            WITH battery_counts AS (
+                SELECT
+                    COALESCE(l.name, 'Без локации') AS location_name,
+                    SUM(CASE WHEN s.battery_level < 20 THEN 1 ELSE 0 END) AS low_battery_count,
+                    SUM(CASE WHEN s.battery_level BETWEEN 20 AND 50 THEN 1 ELSE 0 END) AS medium_battery_count,
+                    SUM(CASE WHEN s.battery_level > 50 THEN 1 ELSE 0 END) AS high_battery_count
+                FROM scooters s
+                LEFT JOIN locations l ON s.location_id = l.location_id
+                GROUP BY l.name
+            )
+            SELECT 
+                location_name,
+                low_battery_count,
+                medium_battery_count,
+                high_battery_count
+            FROM battery_counts
+
+            UNION ALL
+
+            SELECT 
+                'ИТОГО',
+                SUM(low_battery_count),
+                SUM(medium_battery_count),
+                SUM(high_battery_count)
+            FROM battery_counts;
+        """)
+        result = [
+            {
+                "location_name": row["location_name"],
+                "low_battery_count": row["low_battery_count"],
+                "medium_battery_count": row["medium_battery_count"],
+                "high_battery_count": row["high_battery_count"]
+            }
+            for row in rows
+        ]
+        return result
 
 
 
@@ -629,7 +675,7 @@ async def get_review_by_rental_id(pool: asyncpg.pool.Pool, rental_id: str):
 async def get_active_rental(pool, user_id, scooter_id):
     query = """
     SELECT * FROM rentals
-    WHERE user_id = $1 AND scooter_id = $2 AND status = 'active'
+    WHERE user_id = $1 AND scooter_id = $2 AND status IN ('active', 'reserved')
     """
     async with pool.acquire() as conn:
         return await conn.fetchrow(query, user_id, scooter_id)

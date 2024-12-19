@@ -150,11 +150,13 @@ async def manage_scooters():
     # Получение всех самокатов с сортировкой по заряду и локации
     scooters = await get_all_scooters_sorted(current_app.db_pool)
     locations = await get_all_locations(current_app.db_pool)
+    locations_battery_counts = await get_low_battery_scooters_by_location(current_app.db_pool)
 
     return await render_template(
         'admin/manage_scooters.html',
         scooters=scooters,
-        locations=locations
+        locations=locations,
+        locations_battery_counts=locations_battery_counts
     )
 
 # вместо order - rental status
