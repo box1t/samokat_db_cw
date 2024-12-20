@@ -1,3 +1,6 @@
+INSERT INTO roles (name) VALUES ('User'), ('Admin');
+
+
 -- 1. Присваиваем роли User и Admin существующему пользователю
 DO $$
 DECLARE

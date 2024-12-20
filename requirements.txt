@@ -1,4 +1,35 @@
-quart               # Основной фреймворк
-bcrypt              # Для хэширования
-python-dotenv       # Для переменных окружения
-asyncpg             # Для асинхронной PostgreSQL
+aiofiles==24.1.0
+async-timeout==5.0.1
+asyncpg==0.30.0
+bcrypt==4.2.1
+blinker==1.9.0
+click==8.1.7
+contourpy==1.3.1
+cycler==0.12.1
+exceptiongroup==1.2.2
+Flask==3.1.0
+fonttools==4.55.3
+h11==0.14.0
+h2==4.1.0
+hpack==4.0.0
+Hypercorn==0.17.3
+hyperframe==6.0.1
+itsdangerous==2.2.0
+Jinja2==3.1.4
+kiwisolver==1.4.7
+MarkupSafe==3.0.2
+matplotlib==3.10.0
+numpy==2.2.0
+packaging==24.2
+pillow==11.0.0
+priority==2.0.0
+pyparsing==3.2.0
+python-dateutil==2.9.0.post0
+python-dotenv==1.0.1
+Quart==0.19.9
+six==1.17.0
+taskgroup==0.0.0a4
+tomli==2.2.1
+typing_extensions==4.12.2
+Werkzeug==3.1.3
+wsproto==1.2.0

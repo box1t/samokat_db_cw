@@ -277,6 +277,22 @@ async def restore_database():
         db_user = os.getenv('DB_USER')
         db_password = os.getenv('DB_PASSWORD')
 
+        if not all([db_name, db_user, db_password]):
+            logger.error("Переменные окружения для базы данных не настроены.")
+            await flash('Переменные окружения для базы данных не настроены.', 'danger')
+            return redirect(url_for('admin.restore_database'))
+
+        # Проверка, что контейнер запущен
+        check_container_command = "docker ps -q -f name=my_postgres"
+        container_status = subprocess.run(
+            check_container_command, shell=True, capture_output=True, text=True
+        )
+
+        if not container_status.stdout.strip():
+            logger.error("Контейнер my_postgres не запущен.")
+            await flash('Контейнер my_postgres не запущен. Запустите его перед восстановлением.', 'danger')
+            return redirect(url_for('admin.restore_database'))
+
         try:
             # Устанавливаем переменную окружения для пароля
             env = os.environ.copy()
@@ -284,21 +300,19 @@ async def restore_database():
 
             # Команда для очистки базы данных
             truncate_command = f"""
-            docker exec -i my_postgres psql -U {db_user} -d {db_name} -c "TRUNCATE TABLE locations, rental_history, rentals, reviews, roles, scooters, user_roles, users RESTART IDENTITY CASCADE;"
+            psql -h localhost -p 5432 -U postgres -d scooters -c "TRUNCATE TABLE locations, rental_history, rentals, reviews, roles, scooters, user_roles, users RESTART IDENTITY CASCADE;"
             """
-
             truncate_result = subprocess.run(
-                truncate_command, env=env, shell=True, capture_output=True, text=True
+                truncate_command, shell=True, capture_output=True, text=True
             )
 
             if truncate_result.returncode != 0:
                 logger.error(f"Ошибка при очистке базы данных: {truncate_result.stderr}")
-                await flash('Ошибка при очистке базы данных.', 'danger')
+                await flash(f'Ошибка при очистке базы данных: {truncate_result.stderr}', 'danger')
                 return redirect(url_for('admin.restore_database'))
 
-            restore_command = f"""
-            docker exec -i my_postgres psql -U {db_user} -d {db_name} -f {backup_path}
-            """
+            # Команда для восстановления базы данных
+            restore_command = f"docker exec -i my_postgres psql -U {db_user} -d {db_name} < {backup_path}"
             restore_result = subprocess.run(
                 restore_command, shell=True, capture_output=True, text=True
             )
@@ -308,7 +322,7 @@ async def restore_database():
                 await flash('База данных успешно восстановлена из резервной копии.', 'success')
             else:
                 logger.error(f"Ошибка при восстановлении базы данных: {restore_result.stderr}")
-                await flash('Ошибка при восстановлении базы данных.', 'danger')
+                await flash(f'Ошибка при восстановлении базы данных: {restore_result.stderr}', 'danger')
         except Exception as e:
             logger.error(f"Исключение при восстановлении базы данных: {e}")
             await flash('Исключение при восстановлении базы данных.', 'danger')
@@ -319,4 +333,3 @@ async def restore_database():
     backup_files = sorted(os.listdir(backup_dir), reverse=True)
     backup_files = [f for f in backup_files if f.endswith('.sql')]
     return await render_template('admin/restore_database.html', backup_files=backup_files)
-

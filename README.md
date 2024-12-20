@@ -12,7 +12,7 @@ pip install -r requirements.txt
 2. В папке app создай .env файл и заполни его своими переменными окружения:
 
 ```sh
-DB_HOST=127.0.0.1
+DB_HOST=my_postgres
 DB_PORT=5432
 DB_USER=postgres
 DB_PASSWORD=mysecretpassword
@@ -22,7 +22,14 @@ DB_NAME=scooters
 
 3. Запусти __**docker-container с postgres**__ и подключись к серверу через клиент __**psql**__:
 
+```
+docker build -t my_app /home/snowwy/Desktop/MAI/samokat_db_cw/samokat_db_cw
+docker run --name my_app_container -p 5000:5000 -d my_app
 
+
+docker run --name my_postgres -p 5432:5432 -e POSTGRES_PASSWORD=mysecretpassword -d postgres
+
+```
 
 - Если контейнер существует:
 ```sh
