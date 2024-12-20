@@ -250,9 +250,9 @@ async def backup_database():
 @admin_required
 async def restore_database():
     """
-    Восстановление базы данных из резервной копии.
+    Восстановление базы данных из резервной копии с очисткой перед восстановлением.
     """
-    backup_dir = 'backups'
+    backup_dir = '/home/snowwy/Desktop/MAI/samokat_db_cw/samokat_db_cw/backups/'
     if request.method == 'POST':
         form = await request.form
         backup_file = form.get('backup_file')
@@ -282,26 +282,36 @@ async def restore_database():
             env = os.environ.copy()
             env['PGPASSWORD'] = db_password
 
-            # Команда для восстановления базы данных
-            command = [
-                'psql',
-                '-U', db_user,
-                '-d', db_name,
-                '-f', backup_path
-            ]
+            # Команда для очистки базы данных
+            truncate_command = f"""
+            docker exec -i my_postgres psql -U {db_user} -d {db_name} -c "TRUNCATE TABLE locations, rental_history, rentals, reviews, roles, scooters, user_roles, users RESTART IDENTITY CASCADE;"
+            """
 
-            # Выполняем команду восстановления
-            result = subprocess.run(command, env=env, capture_output=True, text=True)
+            truncate_result = subprocess.run(
+                truncate_command, env=env, shell=True, capture_output=True, text=True
+            )
 
-            if result.returncode == 0:
+            if truncate_result.returncode != 0:
+                logger.error(f"Ошибка при очистке базы данных: {truncate_result.stderr}")
+                await flash('Ошибка при очистке базы данных.', 'danger')
+                return redirect(url_for('admin.restore_database'))
+
+            restore_command = f"""
+            docker exec -i my_postgres psql -U {db_user} -d {db_name} -f {backup_path}
+            """
+            restore_result = subprocess.run(
+                restore_command, shell=True, capture_output=True, text=True
+            )
+
+            if restore_result.returncode == 0:
                 logger.info(f'База данных успешно восстановлена из резервной копии.')
                 await flash('База данных успешно восстановлена из резервной копии.', 'success')
             else:
-                logger.error(f"Ошибка при восстановлении базы данных: {result.stderr}")
+                logger.error(f"Ошибка при восстановлении базы данных: {restore_result.stderr}")
                 await flash('Ошибка при восстановлении базы данных.', 'danger')
         except Exception as e:
             logger.error(f"Исключение при восстановлении базы данных: {e}")
-            await flash('Исключение  при восстановлении базы данных.', 'danger')
+            await flash('Исключение при восстановлении базы данных.', 'danger')
 
         return redirect(url_for('admin.admin_dashboard'))
 
@@ -309,5 +319,4 @@ async def restore_database():
     backup_files = sorted(os.listdir(backup_dir), reverse=True)
     backup_files = [f for f in backup_files if f.endswith('.sql')]
     return await render_template('admin/restore_database.html', backup_files=backup_files)
-
 
