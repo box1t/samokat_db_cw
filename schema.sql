@@ -34,8 +34,9 @@ CREATE TABLE scooters (
     battery_consumption NUMERIC(5, 2) DEFAULT 1.5, -- Расход заряда на км
     speed_limit NUMERIC(4, 2) DEFAULT 20.0, -- Максимальная скорость самоката 
     location_id UUID, -- Локация, где находится самокат
-    status VARCHAR(50) DEFAULT 'available', -- Статус самоката ('available', 'reserved', 'in_use', 'maintenance')
+    status VARCHAR(50) DEFAULT 'available', -- Статус самоката ('available', 'in_use', 'on_maintenance')
     last_maintenance_date TIMESTAMP, -- Последнее обслуживание
+    reserved_by_user UUID REFERENCES users(user_id) ON DELETE SET NULL, -- Пользователь, забронировавший самокат
     CONSTRAINT fk_scooters_locations FOREIGN KEY (location_id) REFERENCES locations(location_id) ON DELETE SET NULL
 );
 
@@ -52,11 +53,11 @@ CREATE TABLE rentals (
     distance_km NUMERIC(10, 2) DEFAULT 0.0,
     remaining_battery INT,
     ride_comment TEXT,
-    status VARCHAR(50) DEFAULT 'active', -- Состояние поездки
-    CONSTRAINT fk_rentals_start_location FOREIGN KEY (start_location_id) REFERENCES locations(location_id),
-    CONSTRAINT fk_rentals_end_location FOREIGN KEY (end_location_id) REFERENCES locations(location_id),
-    CONSTRAINT fk_rentals_scooter FOREIGN KEY (scooter_id) REFERENCES scooters(scooter_id),
-    CONSTRAINT fk_rentals_user FOREIGN KEY (user_id) REFERENCES users(user_id)
+    status VARCHAR(50) DEFAULT 'active', -- Состояние поездки ('active', 'reserved', 'completed')
+    CONSTRAINT fk_rentals_start_location FOREIGN KEY (start_location_id) REFERENCES locations(location_id) ON DELETE CASCADE,
+    CONSTRAINT fk_rentals_end_location FOREIGN KEY (end_location_id) REFERENCES locations(location_id) ON DELETE CASCADE,
+    CONSTRAINT fk_rentals_scooter FOREIGN KEY (scooter_id) REFERENCES scooters(scooter_id) ON DELETE CASCADE,
+    CONSTRAINT fk_rentals_user FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
 CREATE TABLE rental_history (
@@ -85,19 +86,14 @@ CREATE TABLE reviews (
     rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5), -- Оценка от 1 до 5
     review_text TEXT, -- Текст отзыва (опционально)
     review_date TIMESTAMP DEFAULT NOW(), -- Дата создания отзыва
-    CONSTRAINT fk_reviews_rentals FOREIGN KEY (rental_id) REFERENCES rental_history(history_id) ON DELETE CASCADE,
+    CONSTRAINT fk_reviews_rentals FOREIGN KEY (rental_id) REFERENCES rentals(rental_id) ON DELETE CASCADE,
     CONSTRAINT fk_reviews_scooters FOREIGN KEY (scooter_id) REFERENCES scooters(scooter_id) ON DELETE CASCADE,
     CONSTRAINT fk_reviews_users FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
+
 -- Заполнение таблиц тестовыми данными
 INSERT INTO roles (name) VALUES ('User'), ('Admin');
-
-
----1. Представления
----2. Функции
----3. Процедуры
----4. Триггеры
 
 
 CREATE OR REPLACE FUNCTION get_average_scooter_rating(scooter_id_param UUID)
@@ -198,102 +194,3 @@ AFTER UPDATE OF status ON rentals
 FOR EACH ROW
 WHEN (NEW.status = 'completed')
 EXECUTE FUNCTION log_rental_history();
-
-
-
-
-CREATE OR REPLACE FUNCTION process_rental(
-    p_uid UUID,
-    p_scooter_id UUID,
-    p_action TEXT,
-    p_end_location UUID
-) RETURNS UUID AS $$
-DECLARE
-    scooter scooters%ROWTYPE;
-    rental rentals%ROWTYPE;
-    distance_km NUMERIC;
-    battery_needed NUMERIC;
-    rental_id UUID;
-BEGIN
-    -- Получаем и блокируем запись о самокате
-    SELECT *
-      INTO scooter
-      FROM scooters s
-     WHERE s.scooter_id = p_scooter_id
-     FOR UPDATE;
-
-    IF NOT FOUND THEN
-        RAISE EXCEPTION 'Самокат не найден.';
-    END IF;
-
-    IF p_action = 'rent' THEN
-        SELECT *
-          INTO rental
-          FROM rentals r
-         WHERE r.user_id = p_uid 
-           AND r.scooter_id = p_scooter_id
-           AND r.status = 'reserved';
-
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'Самокат не забронирован текущим пользователем.';
-        END IF;
-
-        UPDATE rentals
-           SET status = 'active',
-               start_time = NOW()
-         WHERE rental_id = rental.rental_id;
-
-        UPDATE scooters
-           SET status = 'in_use'
-         WHERE scooter_id = p_scooter_id;
-
-        rental_id := rental.rental_id;
-
-    ELSIF p_action = 'continue' THEN
-        SELECT *
-          INTO rental
-          FROM rentals r
-         WHERE r.user_id = p_uid
-           AND r.scooter_id = p_scooter_id
-           AND r.status = 'active';
-
-        IF NOT FOUND THEN
-            RAISE EXCEPTION 'Активная аренда не найдена.';
-        END IF;
-
-        IF p_end_location IS NULL THEN
-            RAISE EXCEPTION 'Не указана конечная локация для продолжения поездки.';
-        END IF;
-
-        SELECT haversine(l1.latitude, l1.longitude, l2.latitude, l2.longitude)
-          INTO distance_km
-          FROM locations l1, locations l2
-         WHERE l1.location_id = rental.end_location_id
-           AND l2.location_id = p_end_location;
-
-        battery_needed := distance_km * scooter.battery_consumption;
-
-        IF scooter.battery_level < battery_needed THEN
-            RAISE EXCEPTION 'Недостаточно заряда для поездки.';
-        END IF;
-
-        UPDATE rentals
-           SET distance_km = COALESCE(distance_km, 0) + distance_km,
-               end_location_id = p_end_location,
-               remaining_battery = scooter.battery_level - battery_needed
-         WHERE rental_id = rental.rental_id;
-
-        UPDATE scooters
-           SET battery_level = battery_level - battery_needed,
-               location_id = p_end_location
-         WHERE scooter_id = p_scooter_id;
-
-        rental_id := rental.rental_id;
-
-    ELSE
-        RAISE EXCEPTION 'Неизвестное действие: %', p_action;
-    END IF;
-
-    RETURN rental_id;
-END;
-$$ LANGUAGE plpgsql;

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,23 +9,23 @@
 <body>
     <header>
         <h1>Детали поездки</h1>
-            <nav>
-                <a href="{{ url_for('main.home') }}">Главная</a>
-                {% if session.get('user_id') %}
-                    <a href="{{ url_for('main.scooter_page', scooter_id=scooter.scooter_id) }}">Страница самоката</a>
-                    <a href="/profile">Профиль</a>
-                    {% if 'Admin' in g.user_roles %}
-                        <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
-                    {% endif %}
-                    <a href="{{ url_for('main.logout') }}">Выход</a>
-                {% else %}
-                    <a href="{{ url_for('main.login') }}">Вход</a>
-                    <a href="{{ url_for('main.register') }}">Регистрация</a>
+        <nav>
+            <a href="{{ url_for('main.home') }}">Главная</a>
+            {% if session.get('user_id') %}
+                <a href="{{ url_for('main.scooter_page', scooter_id=scooter.scooter_id) }}">Страница самоката</a>
+                <a href="/profile">Профиль</a>
+                {% if 'Admin' in g.user_roles %}
+                    <a href="{{ url_for('admin.admin_dashboard') }}">Админ. панель</a>
                 {% endif %}
-            </nav>
+                <a href="{{ url_for('main.logout') }}">Выход</a>
+            {% else %}
+                <a href="{{ url_for('main.login') }}">Вход</a>
+                <a href="{{ url_for('main.register') }}">Регистрация</a>
+            {% endif %}
+        </nav>
     </header>
     <main>
-        <!-- Flash сообщения для деталей поездки -->
+        <!-- Flash сообщения -->
         <section>
             {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
@@ -41,24 +41,34 @@
         <!-- Информация о текущей поездке -->
         <section>
             <h3>Информация о поездке</h3>
-            {% if rental %}
-                <p><strong>ID аренды:</strong> {{ rental.rental_id }}</p>
+            {% if scooter_availability_status %}
                 <p><strong>Самокат:</strong> {{ scooter.model }}</p>
                 <p><strong>Уровень заряда:</strong> {{ scooter.battery_level }}%</p>
-                <p><strong>Текущая локация:</strong> {{ destinations[0].location_name or 'Не выбрана' }}</p>
-                <p><strong>Статус поездки:</strong> {{ rental.status }}</p>
+                {% if start_location_info %}
+                    <p><strong>Текущая локация (старт):</strong> {{ start_location_info.location_name }}</p>
+                {% else %}
+                    <p>Текущая локация: не определена</p>
+                {% endif %}
+                <p><strong>Статус самоката:</strong> 
+                    {% if scooter_availability_status.status == 'reserved' %}Зарезервирован
+                    {% elif scooter_availability_status.status == 'in_use' %}В использовании
+                    {% elif scooter_availability_status.status == 'available' %}Доступен
+                    {% elif scooter_availability_status.status == 'on_maintenance' %}На обслуживании
+                    {% else %}Неизвестный статус{% endif %}
+                </p>
             {% else %}
-                <p>Информация о текущей аренде недоступна.</p>
+                <p>Информация о текущей поездке недоступна.</p>
             {% endif %}
         </section>
 
-        <!-- Форма выбора локации -->
+        <!-- Отображение формы выбора пункта назначения до начала аренды -->
+        {% if scooter_availability_status and scooter_availability_status.status == 'reserved' and not rental %}
         <section>
             <h3>Выберите пункт назначения</h3>
-            {% if destinations|length > 0 %}
+            {% if destinations and destinations|length > 0 %}
                 <form method="POST" action="{{ url_for('main.confirm_rental', scooter_id=scooter.scooter_id) }}">
                     <div class="destination-list">
-                        {% for destination in destinations[1:] %}
+                        {% for destination in destinations %}
                         <label class="destination-card">
                             <input type="radio" name="end_location_id" value="{{ destination.location_id }}" required>
                             <div class="destination-details">
@@ -66,7 +76,7 @@
                                 <p><strong>Расстояние:</strong> {{ "%.2f"|format(destination.distance_km) }} км</p>
                                 <p><strong>Расход заряда:</strong> {{ "%.2f"|format(destination.battery_needed) }}%</p>
                             </div>
-                        </label class="destination-card">
+                        </label>
                         {% endfor %}
                     </div>
                     <button type="submit">Подтвердить</button>
@@ -75,27 +85,29 @@
                 <p>Нет доступных пунктов назначения.</p>
             {% endif %}
         </section>
+        {% endif %}
 
-        <!-- Кнопки для продолжения или завершения аренды -->
+        <!-- Когда аренда активна (rental.status == 'active'), показываем кнопки продолжить/завершить -->
+        {% if rental and rental.status == 'active' %}
         <section>
             <h2>Управление поездкой</h2>
-            {% if rental.status == 'active' %}
-                <form method="POST" action="{{ url_for('main.continue_rental') }}">
-                    <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
-                    <input type="hidden" name="end_location_id" value="{{ rental.end_location_id }}">
-                    <button type="submit">Продолжить поездку</button>
-                </form>
-                <form method="POST" action="{{ url_for('main.complete_rental_route') }}">
-                    <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
-                    <input type="hidden" name="end_location_id" value="{{ rental.end_location_id }}">
-                    <label for="comment">Комментарий:</label>
-                    <textarea id="comment" name="comment"></textarea>
-                    <button type="submit">Завершить поездку</button>
-                </form>
-            {% else %}
-                <p>Продолжение и завершение поездки недоступны.</p>
-            {% endif %}
+            <form method="POST" action="{{ url_for('main.complete_rental_route') }}">
+                <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                <input type="hidden" name="end_location_id" value="{{ rental.end_location_id }}">
+                <label for="comment">Комментарий:</label>
+                <textarea id="comment" name="comment"></textarea><br><br>
+                <button type="submit">Завершить поездку</button>
+            </form>
         </section>
+        {% elif scooter_availability_status and scooter_availability_status.status == 'in_use' %}
+        <!-- Если статус in_use, но аренда ещё не отображена как active (редкий кейс), можно вывести информацию или кнопки -->
+        <!-- По логике, если in_use и аренда активна, она должна быть в rental -->
+        {% else %}
+        <section>
+            <h2>Управление поездкой</h2>
+            <p>Продолжение и завершение поездки недоступны.</p>
+        </section>
+        {% endif %}
     </main>
 </body>
 </html>

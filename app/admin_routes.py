@@ -309,3 +309,5 @@ async def restore_database():
     backup_files = sorted(os.listdir(backup_dir), reverse=True)
     backup_files = [f for f in backup_files if f.endswith('.sql')]
     return await render_template('admin/restore_database.html', backup_files=backup_files)
+
+

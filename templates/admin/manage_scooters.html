@@ -188,13 +188,12 @@
             </form>
         </div>
 
-        <!-- Список самокатов -->
         <h2>Список самокатов</h2>
         <table>
             <thead>
                 <tr>
                     <th>ID самоката</th>
-                    <th>Модель</th>                    
+                    <th>Модель</th>
                     <th>Локация</th>
                     <th>Заряд (%)</th>
                     <th>Статус</th>
@@ -202,34 +201,40 @@
                 </tr>
             </thead>
             <tbody>
-                {% for scooter in scooters %}
-                <tr>
-                    <td>{{ scooter.scooter_id }}</td>
-                    <td>{{ scooter.model }}</td>
-                    <td>{{ scooter.location_name }}</td>
-                    <td>{{ scooter.battery_level }}%</td>
-                    <td>{{ scooter.status }}</td>
-                    <td class="action-buttons">
-                        <!-- Форма для обновления статуса -->
-                        <form method="POST" action="{{ url_for('admin.manage_scooters') }}">
-                            <input type="hidden" name="action" value="update_status">
-                            <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
-                            <select name="status">
-                                <option value="available" {% if scooter.status == 'available' %}selected{% endif %}>Доступен</option>
-                                <option value="on_maintenance" {% if scooter.status == 'on_maintenance' %}selected{% endif %}>На обслуживании</option>
-                            </select>
-                            <button type="submit">Обновить</button>
-                        </form>
-                        
-                        <!-- Форма для удаления -->
-                        <form method="POST" action="{{ url_for('admin.manage_scooters') }}">
-                            <input type="hidden" name="action" value="delete">
-                            <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
-                            <button type="submit" onclick="return confirm('Вы уверены, что хотите удалить этот самокат?');">Удалить</button>
-                        </form>
-                    </td>
-                </tr>
-                {% endfor %}
+                {% if scooters %}
+                    {% for scooter in scooters %}
+                    <tr>
+                        <td>{{ scooter.scooter_id }}</td>
+                        <td>{{ scooter.model }}</td>
+                        <td>{{ scooter.location_name or "Не указано" }}</td>
+                        <td>{{ scooter.battery_level }}%</td>
+                        <td>{{ scooter.status }}</td>
+                        <td class="action-buttons">
+                            <!-- Форма для обновления статуса -->
+                            <form method="POST" action="{{ url_for('admin.manage_scooters') }}">
+                                <input type="hidden" name="action" value="update_status">
+                                <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                                <select name="status">
+                                    <option value="available" {% if scooter.status == 'available' %}selected{% endif %}>Доступен</option>
+                                    <option value="on_maintenance" {% if scooter.status == 'on_maintenance' %}selected{% endif %}>На обслуживании</option>
+                                </select>
+                                <button type="submit">Обновить</button>
+                            </form>
+                            
+                            <!-- Форма для удаления -->
+                            <form method="POST" action="{{ url_for('admin.manage_scooters') }}">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                                <button type="submit" onclick="return confirm('Вы уверены, что хотите удалить этот самокат?');">Удалить</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6">На данный момент самокатов нет.</td>
+                    </tr>
+                {% endif %}
             </tbody>
         </table>
     </main>

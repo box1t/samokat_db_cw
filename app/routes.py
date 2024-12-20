@@ -53,8 +53,8 @@ async def home():
 
         user_id = session.get('user_id')  # Получаем ID текущего пользователя
         locations = await get_all_locations(current_app.db_pool)
-
-        scooters = await search_scooters(
+        #logger.info(f"Current user_id from session: {user_id} (type: {type(user_id)})")
+        scooters, user_has_active_reservation = await search_scooters(
             current_app.db_pool,
             query=query,
             location_id=location_id,
@@ -62,14 +62,16 @@ async def home():
             min_battery=min_battery,
             user_id=user_id
         )
-
+        #logger.info(f"Query: {query}, Location ID: {location_id}, Status: {status}, Min Battery: {min_battery}")
+        #logger.info(f"Scooters returned: {scooters}")
         search_message = "Результаты поиска" if query or location_id or status or min_battery > 0 else None
         return await render_template(
             "home.html",
             scooters=scooters,
             locations=locations,
             search_message=search_message,
-            selected_location_id=location_id
+            selected_location_id=location_id,
+            user_has_active_reservation=user_has_active_reservation
         )
     except Exception as e:
         logger.error(f"Ошибка при загрузке главной страницы: {e}")
@@ -273,25 +275,29 @@ async def scooter_page(scooter_id):
             return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
 
         try:
-            rental = await get_rental_by_id(current_app.db_pool, rental_id, user_id, scooter_id, status='completed')
-            if not rental:
+            # Проверяем, существует ли завершённая аренда в rental_history
+            rental_history = await get_rental_history_by_rental_id(current_app.db_pool, rental_id)
+            if not rental_history:
                 await flash("Аренда не найдена или не завершена.", "danger")
                 return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
 
+            # Проверяем наличие уже добавленного отзыва
             existing_review = await get_review_by_rental_id(current_app.db_pool, rental_id)
             if existing_review:
                 await flash("Вы уже оставили отзыв для этой аренды.", "warning")
                 return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
 
+            # Добавляем отзыв
             await add_scooter_review(current_app.db_pool, rental_id, scooter_id, user_id, rating, review_text)
             await flash("Ваш отзыв успешно добавлен.", "success")
         except Exception as e:
-            logger.error(f"Ошибка при добавлении отзыва: {e}")
+            logger.error(f"Ошибка при добавлении отзыва для rental_id {rental_id}: {e}")
             await flash("Ошибка при добавлении отзыва.", "danger")
 
         return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
 
     try:
+        # Загружаем информацию о самокате и его отзывах
         scooter = await get_scooter_by_id_second(current_app.db_pool, scooter_id, user_id)
         if not scooter:
             await flash("Самокат не найден.", "danger")
@@ -316,7 +322,6 @@ async def scooter_page(scooter_id):
         logger.error(f"Ошибка при загрузке страницы самоката: {e}")
         await flash("Произошла ошибка при загрузке страницы самоката.", "danger")
         return redirect(url_for("main.home"))
-
 
 
 ######################################################################
@@ -344,13 +349,13 @@ async def reserve_scooter_route():
     try:
         if action == "reserve":
             # Вызов функции бронирования
-            rental_id = await reserve_scooter(
+            await reserve_scooter(
                 current_app.db_pool,
                 user_id=user_id,
                 scooter_id=scooter_id,
                 start_location_id=start_location_id
             )
-            await flash(f"Самокат успешно забронирован. ID бронирования: {rental_id}", "success")
+            await flash(f"Самокат успешно забронирован.", "success")
         elif action == "cancel":
             # Вызов функции отмены бронирования
             await cancel_reservation(
@@ -367,7 +372,8 @@ async def reserve_scooter_route():
 
     return redirect(redirect_url)
 
-# 2. home/header -> trip_details.html
+
+
 @main.route("/rental/select_destination/<scooter_id>", methods=["GET"])
 async def select_destination(scooter_id):
     """
@@ -379,29 +385,67 @@ async def select_destination(scooter_id):
         return redirect(url_for("main.login"))
 
     try:
-        # Получаем самокат и доступные локации
+        # Получаем данные самоката
         scooter = await get_scooter_by_id(current_app.db_pool, scooter_id)
         if not scooter:
             await flash("Самокат не найден.", "danger")
             return redirect(url_for("main.home"))
 
+        # Получаем список доступных локаций
         destinations = await get_all_destinations_with_status(current_app.db_pool, scooter_id)
-        #print(destinations)  # Отладка: проверить, что возвращается из функции
 
-        rental = await get_active_rental(current_app.db_pool, user_id, scooter_id)
+        # Обрабатываем данные локаций
+        processed_dest = []
+        for d in destinations:
+            processed_dest.append({
+                "location_id": d["location_id"],
+                "location_name": d["location_name"],
+                "distance_km": float(d["distance_km"]) if d["distance_km"] else 0.0,
+                "battery_needed": float(d["battery_needed"]) if d["battery_needed"] else 0.0,
+                "is_accessible": d["is_accessible"]
+            })
+        destinations = processed_dest
 
+        # Получаем статус аренды самоката для текущего пользователя
+        record = await get_scooter_rental_status_on_selection(current_app.db_pool, user_id, scooter_id)
+        scooter_rental_status_on_selection = dict(record) if record else None
+
+        # Определяем начальную и конечную локации
+        start_location_id = scooter["location_id"]
+        start_location_info = None
+        filtered_destinations = []
+
+        for d in destinations:
+            if d["location_id"] == start_location_id:
+                start_location_info = d
+            else:
+                filtered_destinations.append(d)
+
+        # Проверяем наличие начальной локации
+        if not start_location_info:
+            start_location_info = {"location_id": start_location_id, "location_name": "Неизвестно"}
+
+        logger.info(f"Start location info: {start_location_info}")
+        logger.info(f"Filtered destinations: {filtered_destinations}")
+        logger.info(f"Scooter data: {scooter}")
+        logger.info(f"Scooter availability status: {scooter_rental_status_on_selection}")
+
+        # Рендеринг страницы
         return await render_template(
             "trip_details.html",
-            scooter=scooter,
-            destinations=destinations,
-            rental=rental
+            scooter=dict(scooter),
+            start_location_info=start_location_info,
+            destinations=filtered_destinations,
+            scooter_availability_status=scooter_rental_status_on_selection,
+            rental=None
         )
+
     except Exception as e:
         logger.error(f"Ошибка при загрузке страницы выбора пункта назначения для самоката {scooter_id}: {e}")
         await flash("Произошла ошибка при загрузке данных.", "danger")
         return redirect(url_for("main.home"))
 
-# 3. trip_details.html
+# 3
 @main.route("/rental/confirm/<scooter_id>", methods=["POST"])
 async def confirm_rental(scooter_id):
     """
@@ -417,9 +461,12 @@ async def confirm_rental(scooter_id):
 
     if not end_location_id:
         await flash("Пункт назначения не выбран.", "warning")
-        return redirect(url_for("main.trip_details", scooter_id=scooter_id))
+        return redirect(url_for("main.select_destination", scooter_id=scooter_id))
 
     try:
+        logger.info(f"User: {user_id}, Scooter: {scooter_id}, End location: {end_location_id}")
+
+        # Создание аренды
         rental_id = await process_rental(
             pool=current_app.db_pool,
             user_id=user_id,
@@ -428,62 +475,48 @@ async def confirm_rental(scooter_id):
             end_location_id=end_location_id
         )
 
-        # Получаем обновленную аренду
-        rental = await get_rental_by_id(
-            current_app.db_pool, rental_id, user_id, scooter_id, status='active'
-        )
+        if not rental_id:
+            raise ValueError("Ошибка создания аренды. Rental ID не был возвращён.")
+
+        # Получаем обновлённые данные
+        logger.info(f"Fetching rental by ID: {rental_id}")
+        rental = await get_rental_by_id(current_app.db_pool, rental_id, user_id, scooter_id, status='active')
+        logger.info(f"Rental fetched: {rental}")
+
+        if rental:
+            rental = dict(rental)
+        else:
+            raise ValueError("Ошибка: не удалось получить активную аренду.")
+
         scooter = await get_scooter_by_id(current_app.db_pool, scooter_id)
-        destinations = await get_all_destinations_with_status(current_app.db_pool, scooter_id)
+        scooter = dict(scooter)  # Приводим к словарю
 
+        scooter_availability_status = {"status": scooter.get("status", "unknown")}
 
+        # Логирование для отладки
+        logger.info(f"Scooter: {scooter}")
+        logger.info(f"Scooter availability: {scooter_availability_status}")
+
+        # Поскольку аренда активна, пункты назначения больше не нужны
+        destinations = []
 
         await flash(f"Аренда начата. ID аренды: {rental_id}", "success")
         return await render_template(
             "trip_details.html",
             rental=rental,
             scooter=scooter,
-            destinations=destinations
+            destinations=destinations,
+            scooter_availability_status=scooter_availability_status,
+            start_location_info=None
         )
+
     except Exception as e:
-        logger.error(f"Ошибка при начале аренды самоката {scooter_id}: {e}")
-        await flash(str(e), "danger")
+        logger.error(f"Ошибка при начале аренды: {e}", exc_info=True)
+        await flash("Произошла ошибка при создании аренды. Пожалуйста, повторите попытку.", "danger")
         return redirect(url_for("main.scooter_page", scooter_id=scooter_id))
 
+
 # 4. trip_details.html
-@main.route("/rental/continue", methods=["POST"])
-async def continue_rental():
-    """
-    Продолжить аренду самоката.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        await flash("Пожалуйста, войдите в систему.", "warning")
-        return redirect(url_for("main.login"))
-
-    form = await request.form
-    scooter_id = form.get("scooter_id")
-    end_location_id = form.get("end_location_id")
-
-    if not scooter_id or not end_location_id:
-        await flash("Не указаны необходимые данные для продолжения аренды.", "danger")
-        return redirect(url_for("main.home"))
-
-    try:
-        rental_id = await process_rental(
-            pool=current_app.db_pool,
-            user_id=user_id,
-            scooter_id=scooter_id,
-            action="continue",
-            end_location_id=end_location_id
-        )
-        await flash(f"Поездка продолжается. ID аренды: {rental_id}", "success")
-    except Exception as e:
-        logger.error(f"Ошибка при продолжении аренды самоката {scooter_id}: {e}")
-        await flash(str(e), "danger")
-
-    return redirect(url_for("main.trip_details"))
-
-# 5. trip_details.html
 @main.route("/rental/complete", methods=["POST"])
 async def complete_rental_route():
     """

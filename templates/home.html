@@ -45,7 +45,6 @@
         <!-- Список самокатов -->
         <h2>Доступные самокаты</h2>
         <div class="product-list">
-            {% set show_go_button = scooters|selectattr('status', 'equalto', 'reserved')|selectattr('user_reserved', 'true')|list %}
             {% if scooters %}
                 {% for scooter in scooters %}
                     <div class="product-item">
@@ -56,7 +55,7 @@
                             </a>
                         </h3>
                         <p><strong>Заряд батареи:</strong> {{ scooter.battery_level }}%</p>
-                        <p><strong>Локация:</strong> {{ scooter.location_name or 'N/A' }}</p>
+                        <p><strong>Локация:</strong> {{ scooter.location_name or 'Неизвестно' }}</p>
                         <p><strong>Статус:</strong> 
                             {% if scooter.status == 'available' %}Доступен
                             {% elif scooter.status == 'reserved' %}Забронирован
@@ -65,33 +64,61 @@
                             {% else %}Неизвестный{% endif %}
                         </p>
 
-                        <!-- Кнопки "Забронировать", "Поехали", или "Отменить" -->
-                        {% if show_go_button and scooter.status == 'available' %}
-                            <!-- Ничего не показываем -->
-                        {% elif scooter.status == 'available' %}
-                            <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
-                                <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
-                                <input type="hidden" name="action" value="reserve">
-                                <input type="hidden" name="redirect_url" value="{{ request.url }}">
-                                <button type="submit" class="add-to-cart-button">Забронировать</button>
-                            </form>
-                        {% elif scooter.status == 'reserved' and session.get('user_id') and scooter.user_reserved %}
-                            <form method="GET" action="{{ url_for('main.select_destination', scooter_id=scooter.scooter_id) }}">
-                                <input type="hidden" name="redirect_url" value="{{ request.url }}">
-                                <button type="submit" class="add-to-cart-button">Поехали</button>
-                            </form>
-                            <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
-                                <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
-                                <input type="hidden" name="redirect_url" value="{{ request.url }}">
-                                <input type="hidden" name="action" value="cancel">
-                                <button type="submit" class="add-to-cart-button">Отменить</button>
-                            </form>
+                        <!-- Кнопки действий -->
+                        {% if scooter.status == 'available' %}
+                            {% if not user_has_active_reservation %}
+                                <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
+                                    <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                                    <input type="hidden" name="action" value="reserve">
+                                    <input type="hidden" name="redirect_url" value="{{ request.url }}">
+                                    <button type="submit" class="add-to-cart-button">Забронировать</button>
+                                </form>
+                            {% else %}
+                                <p>Вы уже забронировали самокат.</p>
+                            {% endif %}
+                        {% elif scooter.status == 'reserved' %}
+                            {% if scooter.user_reserved %}
+                                <form method="GET" action="{{ url_for('main.select_destination', scooter_id=scooter.scooter_id) }}">
+                                    <input type="hidden" name="redirect_url" value="{{ request.url }}">
+                                    <button type="submit" class="add-to-cart-button">Поехали</button>
+                                </form>
+                                <form method="POST" action="{{ url_for('main.reserve_scooter_route') }}">
+                                    <input type="hidden" name="scooter_id" value="{{ scooter.scooter_id }}">
+                                    <input type="hidden" name="redirect_url" value="{{ request.url }}">
+                                    <input type="hidden" name="action" value="cancel">
+                                    <button type="submit" class="add-to-cart-button">Отменить</button>
+                                </form>
+                            {% else %}
+                                <p>Самокат забронирован другим пользователем.</p>
+                            {% endif %}
+                        {% elif scooter.status == 'in_use' %}
+                            <p>Самокат в аренде.</p>
+                        {% elif scooter.status == 'on_maintenance' %}
+                            <p>Самокат на обслуживании.</p>
+                        {% else %}
+                            <p>Неизвестный статус.</p>
                         {% endif %}
                     </div>
                 {% endfor %}
             {% else %}
                 <p>Самокаты не найдены. Попробуйте изменить параметры поиска.</p>
             {% endif %}
+        </div>
+
+        <!-- Пагинация -->
+        <div class="pagination">
+            <form method="get" action="{{ url_for('main.home') }}" style="display: inline;">
+                {% if has_previous %}
+                    <input type="hidden" name="page" value="{{ page - 1 }}">
+                    <button type="submit">Предыдущая</button>
+                {% endif %}
+            </form>
+            <form method="get" action="{{ url_for('main.home') }}" style="display: inline;">
+                {% if has_more %}
+                    <input type="hidden" name="page" value="{{ page + 1 }}">
+                    <button type="submit">Следующая</button>
+                {% endif %}
+            </form>
         </div>
     </main>
 </body>
